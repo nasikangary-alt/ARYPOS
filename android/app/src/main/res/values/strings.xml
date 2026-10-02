@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ARY POS</string>
+    <string name="title_activity_main">ARY POS</string>
+    <string name="package_name">com.arypos.app</string>
+    <string name="custom_url_scheme">com.arypos.app</string>
+</resources>

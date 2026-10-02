@@ -1,0 +1,341 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile containing role and status",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "KASIR", "OWNER"] },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "displayName", "role"]
+    },
+    "Category": {
+      "title": "Product Category",
+      "description": "Menu categories such as Ayam, Paket, Minuman",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "displayOrder": { "type": "number" }
+      },
+      "required": ["id", "name"]
+    },
+    "IngredientCategory": {
+      "title": "Ingredient Category",
+      "description": "Categories for inventory stock items such as Bahan Mentah, Olahan, Kemasan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "displayOrder": { "type": "number" },
+        "isSystem": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Ingredient": {
+      "title": "Ingredient Stock Item",
+      "description": "Raw material, prepared food, or packaging item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "unit": { "type": "string" },
+        "stock": { "type": "number" },
+        "minimumStock": { "type": "number" },
+        "criticalStock": { "type": "number" },
+        "costPerUnit": { "type": "number" },
+        "type": { "type": "string", "enum": ["RAW", "PREPARED", "PACKAGING", "OTHER"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "unit", "stock", "type"]
+    },
+    "Product": {
+      "title": "Menu Product",
+      "description": "Food or beverage item for sale",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "sku": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "sellingPrice": { "type": "number" },
+        "active": { "type": "boolean" },
+        "image": { "type": "string" },
+        "recipeId": { "type": "string" },
+        "stockTracked": { "type": "boolean" },
+        "stock": { "type": "number" },
+        "costPerUnit": { "type": "number" },
+        "isProduction": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "categoryId", "sellingPrice"]
+    },
+    "Recipe": {
+      "title": "Bill of Materials / Recipe",
+      "description": "Recipe mapping product to required ingredients",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "items": { "type": "array" },
+        "totalHpp": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "productId", "items"]
+    },
+    "StockMovement": {
+      "title": "Stock Movement Ledger",
+      "description": "Immutable log of stock adjustments and movements",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ingredientId": { "type": "string" },
+        "ingredientName": { "type": "string" },
+        "type": { "type": "string", "enum": ["PURCHASE", "PRODUCTION", "SALE", "ADJUSTMENT", "WASTE", "RETURN"] },
+        "changeAmount": { "type": "number" },
+        "balanceAfter": { "type": "number" },
+        "referenceId": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "ingredientId", "type", "changeAmount", "createdAt"]
+    },
+    "StockProduction": {
+      "title": "Chicken Processing Production Record",
+      "description": "Record converting raw chicken kg to prepared pieces",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "rawIngredientId": { "type": "string" },
+        "rawIngredientName": { "type": "string" },
+        "rawQuantity": { "type": "number" },
+        "preparedIngredientId": { "type": "string" },
+        "preparedIngredientName": { "type": "string" },
+        "preparedQuantity": { "type": "number" },
+        "yieldRatio": { "type": "number" },
+        "notes": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "date", "rawQuantity", "preparedQuantity"]
+    },
+    "Purchase": {
+      "title": "Stock Purchase / Barang Masuk",
+      "description": "Record of stock purchased from suppliers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "supplier": { "type": "string" },
+        "date": { "type": "string" },
+        "ingredientId": { "type": "string" },
+        "ingredientName": { "type": "string" },
+        "quantity": { "type": "number" },
+        "costPerUnit": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "notes": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "supplier", "date", "ingredientId", "quantity", "totalCost"]
+    },
+    "Sale": {
+      "title": "POS Transaction Sale Record",
+      "description": "Sales receipt and order metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "transactionNo": { "type": "string" },
+        "date": { "type": "string" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "discount": { "type": "number" },
+        "finalAmount": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "cashReceived": { "type": "number" },
+        "changeAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["COMPLETED", "VOID"] },
+        "cashierId": { "type": "string" },
+        "cashierName": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "transactionNo", "date", "items", "finalAmount", "paymentMethod", "status"]
+    },
+    "Expense": {
+      "title": "Store Expense Record",
+      "description": "Operational expense record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "note": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "date", "category", "amount"]
+    },
+    "Employee": {
+      "title": "Employee Data",
+      "description": "Staff profile and wage structure",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "position": { "type": "string" },
+        "dailyWage": { "type": "number" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "position", "dailyWage"]
+    },
+    "Attendance": {
+      "title": "Employee Attendance",
+      "description": "Staff daily attendance and overtime record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string", "enum": ["PRESENT", "ABSENT", "OVERTIME"] },
+        "overtimeHours": { "type": "number" },
+        "wagePaid": { "type": "number" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "date", "status"]
+    },
+    "AuditLog": {
+      "title": "Audit Activity Trail",
+      "description": "Log of system actions for accountability",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "userUid": { "type": "string" },
+        "userName": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "action", "userUid"]
+    },
+    "Staff": {
+      "title": "Staff Account",
+      "description": "POS Staff cashier profile with username and PIN for local switch sign-in",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "name": { "type": "string" },
+        "pin": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "KASIR", "OWNER"] },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "username", "name", "pin", "role", "active"]
+    },
+    "Shift": {
+      "title": "Cashier Shift Session",
+      "description": "POS cashier open/close shift record containing cash reconciliation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "staffId": { "type": "string" },
+        "staffName": { "type": "string" },
+        "openedAt": { "type": "string" },
+        "closedAt": { "type": "string" },
+        "openingCash": { "type": "number" },
+        "expectedCash": { "type": "number" },
+        "actualCash": { "type": "number" },
+        "cashDifference": { "type": "number" },
+        "totalSalesCash": { "type": "number" },
+        "totalSalesQris": { "type": "number" },
+        "totalSalesTransfer": { "type": "number" },
+        "status": { "type": "string", "enum": ["OPEN", "CLOSED"] },
+        "notes": { "type": "string" },
+        "closedBy": { "type": "string" },
+        "closedByName": { "type": "string" }
+      },
+      "required": ["id", "staffId", "staffName", "openedAt", "openingCash", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile collection"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Product categories"
+    },
+    "/ingredient_categories/{categoryId}": {
+      "schema": "IngredientCategory",
+      "description": "Ingredient stock categories"
+    },
+    "/ingredients/{ingredientId}": {
+      "schema": "Ingredient",
+      "description": "Raw, prepared, and packaging ingredient stock"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Menu products"
+    },
+    "/recipes/{recipeId}": {
+      "schema": "Recipe",
+      "description": "Product BOM recipes"
+    },
+    "/stock_movements/{movementId}": {
+      "schema": "StockMovement",
+      "description": "Stock audit movements history"
+    },
+    "/stock_productions/{productionId}": {
+      "schema": "StockProduction",
+      "description": "Chicken processing production logs"
+    },
+    "/purchases/{purchaseId}": {
+      "schema": "Purchase",
+      "description": "Stock purchases from suppliers"
+    },
+    "/sales/{saleId}": {
+      "schema": "Sale",
+      "description": "POS Sales transactions"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Operational expenses"
+    },
+    "/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Store employees"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "Attendance",
+      "description": "Employee attendance records"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "System activity logs"
+    },
+    "/staff/{staffId}": {
+      "schema": "Staff",
+      "description": "POS staff credentials for PIN-based logins"
+    },
+    "/shifts/{shiftId}": {
+      "schema": "Shift",
+      "description": "Cashier shift reconciliation sessions"
+    }
+  }
+}

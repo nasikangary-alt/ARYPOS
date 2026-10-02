@@ -1,0 +1,110 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwnerEmail() {
+      return isSignedIn() && request.auth.token.email == 'nasikangary@gmail.com';
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Categories
+    match /categories/{categoryId} {
+      allow read, write: if true;
+    }
+
+    // Ingredient Categories
+    match /ingredient_categories/{categoryId} {
+      allow read, write: if true;
+    }
+
+    // Ingredients
+    match /ingredients/{ingredientId} {
+      allow read, write: if true;
+    }
+
+    // Products
+    match /products/{productId} {
+      allow read, write: if true;
+    }
+
+    // Recipes
+    match /recipes/{recipeId} {
+      allow read, write: if true;
+    }
+
+    // Stock Movements
+    match /stock_movements/{movementId} {
+      allow read, write: if true;
+    }
+
+    // Stock Productions
+    match /stock_productions/{productionId} {
+      allow read, write: if true;
+    }
+
+    // Purchases
+    match /purchases/{purchaseId} {
+      allow read, write: if true;
+    }
+
+    // Sales
+    match /sales/{saleId} {
+      allow read, write: if true;
+    }
+
+    // Expenses
+    match /expenses/{expenseId} {
+      allow read, write: if true;
+    }
+
+    // Cash & QRIS Mutations
+    match /cash_mutations/{mutationId} {
+      allow read, write: if true;
+    }
+
+    // Employees
+    match /employees/{employeeId} {
+      allow read, write: if true;
+    }
+
+    // Attendance
+    match /attendance/{attendanceId} {
+      allow read, write: if true;
+    }
+
+    // Audit Logs
+    match /audit_logs/{logId} {
+      allow read, write: if true;
+    }
+
+    // Staff Accounts
+    match /staff/{staffId} {
+      allow read, write: if true;
+    }
+
+    // Shifts
+    match /shifts/{shiftId} {
+      allow read, write: if true;
+    }
+
+    // System Locks (Single Active Cashier Lock)
+    match /system_locks/{lockId} {
+      allow read, write: if true;
+    }
+
+    // Default match
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+

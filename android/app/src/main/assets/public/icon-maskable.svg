@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGradMask" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D92D20"/>
+      <stop offset="45%" stop-color="#FF641F"/>
+      <stop offset="100%" stop-color="#F79009"/>
+    </linearGradient>
+    <linearGradient id="badgeGradMask" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+    <filter id="shadowMask" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Full Bleed Square for Android adaptive maskable icon -->
+  <rect width="512" height="512" fill="url(#bgGradMask)"/>
+
+  <!-- Content scaled and centered within the 80% safe zone circle -->
+  <g transform="translate(256, 235) scale(0.82)">
+    <!-- Plate / Glow Circle -->
+    <circle r="148" fill="#FFFFFF" fill-opacity="0.12"/>
+    <circle r="130" fill="#FFFFFF" filter="url(#shadowMask)"/>
+
+    <!-- Chicken Drumstick Motif -->
+    <path d="M-55,-60 C-20,-105 55,-95 85,-40 C110,5 95,65 50,85 C15,100 -35,90 -65,55 C-90,25 -85,-20 -55,-60 Z" fill="#D9480F"/>
+    <path d="M-45,-50 C-15,-90 48,-80 72,-35 C92,5 78,55 42,70 C12,82 -28,75 -52,45 C-72,20 -70,-15 -45,-50 Z" fill="#F76707"/>
+    <ellipse cx="-15" cy="-20" rx="14" ry="24" transform="rotate(-25 -15 -20)" fill="#FF922B"/>
+    <ellipse cx="25" cy="10" rx="12" ry="18" transform="rotate(35 25 10)" fill="#FFA94D"/>
+    <circle cx="-5" cy="25" r="7" fill="#FFE8CC"/>
+
+    <!-- Bone -->
+    <path d="M-60,50 L-95,95 C-102,104 -115,102 -122,95 C-130,87 -128,74 -120,66 L-85,25 Z" fill="#F1F3F5"/>
+    <circle cx="-118" cy="98" r="14" fill="#FFFFFF"/>
+    <circle cx="-132" cy="80" r="14" fill="#FFFFFF"/>
+
+    <!-- Star Badge -->
+    <g transform="translate(100, 85)" filter="url(#shadowMask)">
+      <circle r="34" fill="url(#badgeGradMask)" stroke="#FFFFFF" stroke-width="4"/>
+      <path d="M0,-19 L5,-6 L20,-4 L9,6 L12,20 L0,12 L-12,20 L-9,6 L-20,-4 L-5,-6 Z" fill="#FFFFFF"/>
+    </g>
+  </g>
+
+  <!-- Brand Typography in Safe Zone -->
+  <text x="256" y="415" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="44" letter-spacing="2" fill="#FFFFFF" filter="url(#shadowMask)">
+    ARY POS
+  </text>
+  <text x="256" y="440" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="700" font-size="16" letter-spacing="3" fill="#FFFFFF" fill-opacity="0.9">
+    AYAM GEPREK ARY
+  </text>
+</svg>

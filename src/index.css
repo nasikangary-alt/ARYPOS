@@ -1,0 +1,56 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --bg-app: #F7F8FA;
+    --surface-card: #FFFFFF;
+    --surface-secondary: #F1F4F8;
+    --brand-primary: #FF641F;
+    --brand-hover: #F45116;
+    --text-primary: #172033;
+    --text-secondary: #667085;
+    --text-muted: #98A2B3;
+    --border-subtle: #E8ECF2;
+    --success: #12B76A;
+    --success-bg: #ECFDF3;
+    --warning: #F79009;
+    --warning-bg: #FFFAEB;
+    --danger: #F04438;
+    --danger-bg: #FEF3F2;
+    --info: #1570EF;
+    --info-bg: #EFF8FF;
+  }
+
+  body {
+    background-color: #F7F8FA;
+    color: #172033;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Custom Soft Shadows & iOS-like Card styling */
+.card-soft {
+  background-color: #FFFFFF;
+  border: 1px solid #E8ECF2;
+  border-radius: 18px;
+  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.03), 0 4px 12px rgba(23, 32, 51, 0.02);
+}
+
+.card-soft-elevated {
+  background-color: #FFFFFF;
+  border: 1px solid #E8ECF2;
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(23, 32, 51, 0.06);
+}
+
+/* Custom scrollbar hiding */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

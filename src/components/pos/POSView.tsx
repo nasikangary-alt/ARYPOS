@@ -483,22 +483,22 @@ export const POSView: React.FC<POSViewProps> = ({
       className={`min-h-screen bg-[#F7F8FA] text-[#172033] ${
         isDesktopWide
           ? 'w-full max-w-full pb-24'
-          : 'max-w-[430px] mx-auto w-full pb-32'
+          : 'max-w-[430px] mx-auto w-full pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] overflow-x-hidden'
       }`}
     >
       {/* STICKY TOP CONTROLS: HEADER + CHANNEL + SEARCH + CATEGORIES */}
       <header
         className={`sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#E2E6EC] ${
-          isDesktopWide ? 'px-4 sm:px-6 pt-3 pb-3 space-y-2.5' : 'px-3.5 pt-3 pb-2.5 space-y-2.5'
+          isDesktopWide ? 'px-4 sm:px-6 pt-3 pb-3 space-y-2.5' : 'px-3.5 pt-2.5 pb-2 space-y-2'
         }`}
       >
         {/* 1. COMPACT HEADER */}
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <h1 className="text-[20px] sm:text-[22px] font-extrabold text-[#172033] tracking-tight leading-none">
+            <h1 className="text-[18px] sm:text-[22px] font-extrabold text-[#172033] tracking-tight leading-tight">
               Kasir
             </h1>
-            <p className="text-[12px] sm:text-[13px] font-medium text-[#667085] leading-snug mt-0.5">
+            <p className="text-[11px] sm:text-[13px] font-medium text-[#667085] leading-tight mt-0.5">
               Ayam Geprek ARY
             </p>
           </div>
@@ -507,10 +507,10 @@ export const POSView: React.FC<POSViewProps> = ({
           <button
             type="button"
             onClick={() => setShowCashierMenu(true)}
-            className="px-3 py-1.5 rounded-full bg-white hover:bg-[#F7F8FA] border border-[#E2E6EC] shadow-2xs flex items-center gap-2 text-xs font-bold text-[#172033] active:scale-95 transition cursor-pointer shrink-0"
+            className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-white hover:bg-[#F7F8FA] border border-[#E2E6EC] shadow-2xs flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs font-bold text-[#172033] active:scale-95 transition cursor-pointer shrink-0"
           >
             <span className="w-2.5 h-2.5 rounded-full bg-[#12B76A] shrink-0" />
-            <span className="truncate max-w-[160px]">
+            <span className="truncate max-w-[130px] sm:max-w-[160px]">
               {currentEmployee?.name || 'Rina'} ({roleLabel})
             </span>
             <ChevronDown className="w-3.5 h-3.5 text-[#667085] shrink-0" />
@@ -518,7 +518,7 @@ export const POSView: React.FC<POSViewProps> = ({
         </div>
 
         {/* 2. CHANNEL SELECTOR (OFFLINE / GOFOOD / GRABFOOD / SHOPEEFOOD) */}
-        <div className="flex items-center gap-2 overflow-x-auto flex-nowrap no-scrollbar py-0.5">
+        <div className="w-full -mx-3.5 px-3.5 sm:mx-0 sm:px-0 flex items-center gap-2 overflow-x-auto flex-nowrap no-scrollbar py-0.5 overscroll-x-contain touch-pan-x">
           {CHANNEL_TABS.map((ch) => {
             const isSelected = selectedOrderType === ch.id;
             return (
@@ -526,7 +526,7 @@ export const POSView: React.FC<POSViewProps> = ({
                 key={ch.id}
                 type="button"
                 onClick={() => handleSelectOrderType(ch.id)}
-                className={`h-9 min-w-[96px] sm:min-w-[112px] px-3.5 rounded-xl border text-xs font-extrabold tracking-wide flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap transition cursor-pointer active:scale-[0.98] ${
+                className={`h-8.5 sm:h-9 min-w-[90px] sm:min-w-[112px] px-3 sm:px-3.5 rounded-xl border text-[11px] sm:text-xs font-extrabold tracking-wide flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap transition cursor-pointer active:scale-[0.98] ${
                   isSelected
                     ? ch.activeBg
                     : 'bg-[#F7F8FA] border-[#E2E6EC] text-[#172033] hover:bg-white'
@@ -549,17 +549,19 @@ export const POSView: React.FC<POSViewProps> = ({
               </button>
             );
           })}
+          {/* Trailing space for swipe reachability */}
+          <div className="w-1 shrink-0" aria-hidden="true" />
         </div>
 
         {/* 3. SEARCH FIELD */}
         <div className="relative">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#667085]" />
+          <Search className="w-4 h-4 absolute left-3 sm:left-3.5 top-1/2 -translate-y-1/2 text-[#667085]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari menu makanan / minuman..."
-            className="w-full h-9 sm:h-10 pl-10 pr-8 rounded-full bg-[#F7F8FA] border border-[#E2E6EC] text-xs font-medium text-[#172033] placeholder-[#667085] focus:outline-none focus:border-[#FF6B22] focus:bg-white transition"
+            className="w-full h-8.5 sm:h-10 pl-9 sm:pl-10 pr-8 rounded-full bg-[#F7F8FA] border border-[#E2E6EC] text-xs font-medium text-[#172033] placeholder-[#667085] focus:outline-none focus:border-[#FF6B22] focus:bg-white transition"
           />
           {searchQuery && (
             <button
@@ -573,7 +575,7 @@ export const POSView: React.FC<POSViewProps> = ({
         </div>
 
         {/* 4. CATEGORY FILTER (Semua | Ayam | Paket | Minuman | Tambahan) */}
-        <div className="flex items-center gap-2 overflow-x-auto flex-nowrap no-scrollbar pt-0.5">
+        <div className="w-full -mx-3.5 px-3.5 sm:mx-0 sm:px-0 flex items-center gap-1.5 sm:gap-2 overflow-x-auto flex-nowrap no-scrollbar pt-0.5 overscroll-x-contain touch-pan-x">
           {FILTER_CATEGORIES.map((cat) => {
             const isSelected = selectedCategory === cat.id;
             return (
@@ -581,7 +583,7 @@ export const POSView: React.FC<POSViewProps> = ({
                 key={cat.id}
                 type="button"
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold shrink-0 whitespace-nowrap transition cursor-pointer active:scale-95 ${
+                className={`px-3 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold shrink-0 whitespace-nowrap transition cursor-pointer active:scale-95 ${
                   isSelected
                     ? 'bg-[#FF6B22] text-white border border-[#FF6B22] shadow-2xs'
                     : 'bg-white border border-[#E2E6EC] text-[#172033] hover:bg-[#F7F8FA]'
@@ -591,11 +593,13 @@ export const POSView: React.FC<POSViewProps> = ({
               </button>
             );
           })}
+          {/* Trailing space for swipe reachability */}
+          <div className="w-1 shrink-0" aria-hidden="true" />
         </div>
       </header>
 
       {/* 5. MENU LIST (COMPACT LIST VIEW ONLY, FULL POS WIDTH) */}
-      <main className={isDesktopWide ? 'px-4 sm:px-6 pt-3 pb-4' : 'px-3.5 pt-2.5 pb-4'}>
+      <main className={isDesktopWide ? 'px-4 sm:px-6 pt-3 pb-4' : 'px-3.5 pt-2 pb-4'}>
         <div className="flex flex-col gap-2">
           {filteredProducts.map((product) => {
             const stock = productStockStatus.get(product.id) ?? 0;
@@ -729,7 +733,7 @@ export const POSView: React.FC<POSViewProps> = ({
         className={`fixed z-30 pointer-events-none ${
           isDesktopWide
             ? 'bottom-[56px] lg:bottom-3 left-0 lg:left-64 right-0 px-4 sm:px-6 pb-1.5 lg:pb-0'
-            : 'bottom-[56px] left-0 right-0 px-3 pb-1.5'
+            : 'bottom-[calc(56px+env(safe-area-inset-bottom,0px))] left-0 right-0 px-3 pb-1.5'
         }`}
       >
         <div className={isDesktopWide ? 'w-full max-w-full' : 'max-w-[430px] mx-auto'}>
@@ -739,7 +743,7 @@ export const POSView: React.FC<POSViewProps> = ({
                 setIsCartSheetOpen(true);
               }
             }}
-            className={`pointer-events-auto bg-[#FF6B22] text-white rounded-2xl px-4 py-2.5 shadow-[0_6px_20px_rgba(255,107,34,0.28)] flex items-center justify-between gap-3 transition ${
+            className={`pointer-events-auto bg-[#FF6B22] text-white rounded-2xl px-3.5 sm:px-4 py-2 sm:py-2.5 shadow-[0_6px_20px_rgba(255,107,34,0.28)] flex items-center justify-between gap-3 transition ${
               cartCount > 0
                 ? 'cursor-pointer active:scale-[0.995]'
                 : 'opacity-95'

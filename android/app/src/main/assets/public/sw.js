@@ -87,16 +87,22 @@ define(['./workbox-43e44e5a'], (function (workbox) { 'use strict';
     "revision": "c18cb4360b89f16adefa4d93ddd49aec"
   }, {
     "url": "index.html",
-    "revision": "74a649173f7fe0b15c6c0887519b5db1"
+    "revision": "d338c68b18c1acddd8236d25120388c9"
   }, {
     "url": "icon.svg",
-    "revision": "e7fc4829f0aee5a7085af1ad1f03c8ba"
+    "revision": "4c99e4e47b1d0d14cfe786389dc25b5a"
   }, {
     "url": "icon-maskable.svg",
-    "revision": "d122c9e9a388a77e4302dea9e10dd56b"
+    "revision": "3e1070359fe97987fcc97678e7ec6e65"
   }, {
     "url": "favicon.ico",
     "revision": "e5c4b73e3f5b1d2d97e220a1bf5b606f"
+  }, {
+    "url": "ary-logo-icon.svg",
+    "revision": "4c99e4e47b1d0d14cfe786389dc25b5a"
+  }, {
+    "url": "ary-logo-full.svg",
+    "revision": "a19daaf6f1dbb517b942493b870cb7dd"
   }, {
     "url": "apple-touch-icon.png",
     "revision": "cf0fc2854409324fa3cad41247d2a93a"
@@ -110,32 +116,38 @@ define(['./workbox-43e44e5a'], (function (workbox) { 'use strict';
     "url": "assets/jspdf.plugin.autotable-BrAqd2M3.js",
     "revision": null
   }, {
-    "url": "assets/jspdf.es.min--6cGTn9K.js",
+    "url": "assets/jspdf.es.min-EkMjozEO.js",
     "revision": null
   }, {
-    "url": "assets/index.es-C7wQ1lnA.js",
+    "url": "assets/index.es-CKqbnUjL.js",
     "revision": null
   }, {
-    "url": "assets/index-DD9Brg_t.css",
+    "url": "assets/index-CjJtQN7H.js",
     "revision": null
   }, {
-    "url": "assets/index-CMweLfta.js",
+    "url": "assets/index-C75mvKOt.css",
     "revision": null
   }, {
-    "url": "assets/html2canvas-CYm--z55.js",
+    "url": "assets/html2canvas-DSlaktab.js",
     "revision": null
   }, {
     "url": "apple-touch-icon.png",
     "revision": "cf0fc2854409324fa3cad41247d2a93a"
   }, {
+    "url": "ary-logo-full.svg",
+    "revision": "a19daaf6f1dbb517b942493b870cb7dd"
+  }, {
+    "url": "ary-logo-icon.svg",
+    "revision": "4c99e4e47b1d0d14cfe786389dc25b5a"
+  }, {
     "url": "favicon.ico",
     "revision": "e5c4b73e3f5b1d2d97e220a1bf5b606f"
   }, {
     "url": "icon-maskable.svg",
-    "revision": "d122c9e9a388a77e4302dea9e10dd56b"
+    "revision": "3e1070359fe97987fcc97678e7ec6e65"
   }, {
     "url": "icon.svg",
-    "revision": "e7fc4829f0aee5a7085af1ad1f03c8ba"
+    "revision": "4c99e4e47b1d0d14cfe786389dc25b5a"
   }, {
     "url": "pwa-192x192.png",
     "revision": "c18cb4360b89f16adefa4d93ddd49aec"

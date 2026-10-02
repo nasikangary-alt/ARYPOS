@@ -665,17 +665,16 @@ export const MoreView: React.FC<MoreViewProps> = ({ onNavigateTab }) => {
       {/* About Modal */}
       {showAboutModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-[#E8ECF2] space-y-4 text-center">
-            <AyamLogo size="lg" className="mx-auto" />
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl border border-[#E8ECF2] space-y-3 text-center">
+            <img
+              src="/ary-logo-full.svg"
+              alt="Ayam Geprek ARY"
+              className="h-28 w-auto mx-auto object-contain drop-shadow-sm select-none"
+              referrerPolicy="no-referrer"
+            />
             <div>
-              <h3 className="font-bold text-base text-[#172033]">
-                AYAM GEPREK ARY
-              </h3>
-              <p className="text-xs text-[#667085] font-semibold mt-0.5">
-                Pedasnya Bikin Nagih!
-              </p>
-              <p className="text-[11px] text-[#98A2B3] mt-2 leading-relaxed">
-                Versi 2.4 (2026 Modern Edition) &bull; Sistem POS, Inventory, HPP & Manajemen Dapur Restoran.
+              <p className="text-[11px] text-[#667085] mt-1 leading-relaxed">
+                Versi 2.4 (2026 Modern Edition) &bull; Sistem POS, Inventory, HPP &amp; Manajemen Dapur Restoran.
               </p>
             </div>
             <button

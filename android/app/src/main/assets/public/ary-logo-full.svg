@@ -1,0 +1,185 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800" fill="none">
+  <defs>
+    <!-- Red gradient for ARY lettering -->
+    <linearGradient id="aryRedGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FF2A2A"/>
+      <stop offset="60%" stop-color="#D61818"/>
+      <stop offset="100%" stop-color="#A50808"/>
+    </linearGradient>
+
+    <!-- Comb & Emblem Red gradient -->
+    <linearGradient id="emblemRedGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF3333"/>
+      <stop offset="100%" stop-color="#C40D0D"/>
+    </linearGradient>
+
+    <!-- Flame gradient -->
+    <linearGradient id="flameGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#FF3D00"/>
+      <stop offset="50%" stop-color="#FF9100"/>
+      <stop offset="100%" stop-color="#FFEA00"/>
+    </linearGradient>
+
+    <!-- Beak yellow gradient -->
+    <linearGradient id="beakGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD600"/>
+      <stop offset="100%" stop-color="#FF9100"/>
+    </linearGradient>
+
+    <!-- Drop shadow for 3D depth -->
+    <filter id="logoShadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <!-- Group containing the entire master brand mark -->
+  <g filter="url(#logoShadow)">
+    
+    <!-- 1. BACK RED EMBLEM / CREST BEHIND CHICKEN HEAD -->
+    <!-- White outer border for backing -->
+    <path d="M 285 240 C 270 170, 340 135, 410 135 C 475 135, 525 170, 515 240 C 508 285, 475 320, 420 325 C 345 330, 295 295, 285 240 Z"
+          fill="#FFFFFF" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- Red body of crest -->
+    <path d="M 288 240 C 275 175, 342 140, 410 140 C 470 140, 518 175, 510 240 C 504 280, 470 315, 418 320 C 350 325, 298 290, 288 240 Z"
+          fill="url(#emblemRedGrad)"/>
+
+    <!-- 2. CHICKEN CHARACTER (White Face & Neck) -->
+    <!-- White outer stroke for character silhouette -->
+    <path d="M 270 330 C 270 320, 310 215, 415 210 C 470 208, 495 245, 480 290 C 470 315, 440 335, 380 345 C 320 355, 275 345, 270 330 Z"
+          fill="#FFFFFF" stroke="#FFFFFF" stroke-width="14" stroke-linejoin="round"/>
+    
+    <!-- Chicken White Head Fill with gentle contour -->
+    <path d="M 275 330 C 285 240, 350 215, 425 215 C 475 215, 490 250, 475 290 C 465 315, 435 340, 370 345 C 320 350, 280 340, 275 330 Z"
+          fill="#FFFFFF"/>
+
+    <!-- 3. ROOSTER COMB (Top Red Lobes) -->
+    <g>
+      <!-- White stroke around comb -->
+      <path d="M 335 220 C 315 170, 365 145, 395 180 C 415 140, 465 145, 470 190 C 495 175, 520 205, 500 235 Z"
+            fill="#FFFFFF" stroke="#FFFFFF" stroke-width="10" stroke-linejoin="round"/>
+      <!-- Red Comb Fill -->
+      <path d="M 338 218 C 322 175, 365 152, 392 185 C 415 148, 460 152, 465 192 C 488 180, 512 208, 495 232 Z"
+            fill="url(#emblemRedGrad)"/>
+    </g>
+
+    <!-- 4. ROOSTER EYE -->
+    <circle cx="425" cy="245" r="14" fill="#1A1A1A"/>
+    <!-- Specular light reflections in eye -->
+    <circle cx="421" cy="241" r="5" fill="#FFFFFF"/>
+    <circle cx="428" cy="248" r="2.5" fill="#FFFFFF"/>
+
+    <!-- 5. SQUAWKING OPEN BEAK (Yellow/Orange) -->
+    <!-- White stroke backing for beak -->
+    <path d="M 455 235 L 515 245 L 475 285 L 452 265 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round"/>
+    <!-- Upper Beak -->
+    <path d="M 456 238 L 510 248 L 468 266 Z" fill="url(#beakGrad)"/>
+    <!-- Lower Beak -->
+    <path d="M 466 266 L 500 255 L 472 282 Z" fill="#FF8F00"/>
+    <!-- Inside Mouth -->
+    <path d="M 460 250 L 490 252 L 465 270 Z" fill="#8E0000"/>
+
+    <!-- 6. RED WATTLE (Under Beak) -->
+    <path d="M 430 270 C 430 270, 420 315, 442 322 C 460 328, 468 300, 460 275 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="8"/>
+    <path d="M 432 272 C 432 272, 424 312, 442 318 C 456 322, 464 298, 458 276 Z" fill="url(#emblemRedGrad)"/>
+
+    <!-- 7. SQUAWK SOUND ACCENT RAYS -->
+    <g fill="#FF9E00" stroke="#FFFFFF" stroke-width="2">
+      <!-- Top Ray -->
+      <path d="M 525 220 C 535 218, 545 224, 550 230 C 540 232, 532 228, 525 220 Z"/>
+      <!-- Middle Ray -->
+      <path d="M 532 250 C 548 248, 560 253, 565 258 C 550 262, 540 258, 532 250 Z"/>
+      <!-- Bottom Ray -->
+      <path d="M 522 275 C 535 280, 542 288, 545 295 C 532 292, 526 284, 522 275 Z"/>
+    </g>
+
+    <!-- 8. MASTER "ARY" 3D LETTERING -->
+    <g id="ary-lettering">
+      <!-- WHITE THICK OUTLINE / BASE FOR "ARY" -->
+      <!-- Letter A Outer -->
+      <path d="M 285 340 C 330 330, 345 350, 335 410 L 305 505 C 300 515, 275 515, 265 500 L 255 450 L 205 455 L 185 505 C 175 520, 150 515, 145 500 L 205 355 C 215 335, 250 335, 285 340 Z"
+            fill="#FFFFFF" stroke="#FFFFFF" stroke-width="20" stroke-linejoin="round" stroke-linecap="round"/>
+      <!-- Letter R Outer -->
+      <path d="M 345 340 C 405 330, 480 340, 480 405 C 480 445, 450 465, 415 470 L 485 505 C 495 512, 485 525, 465 525 L 405 525 L 365 475 L 345 475 L 335 515 C 330 525, 310 525, 305 510 L 330 350 Z"
+            fill="#FFFFFF" stroke="#FFFFFF" stroke-width="20" stroke-linejoin="round" stroke-linecap="round"/>
+      <!-- Letter Y Outer with Flame -->
+      <path d="M 485 345 C 500 340, 520 355, 510 375 L 480 440 L 480 505 C 480 520, 455 520, 450 505 L 450 445 L 405 375 C 395 355, 415 340, 430 345 L 465 400 Z"
+            fill="#FFFFFF" stroke="#FFFFFF" stroke-width="20" stroke-linejoin="round" stroke-linecap="round"/>
+      
+      <!-- Flame at top of Y Outer -->
+      <path d="M 605 305 C 625 330, 615 365, 580 380 C 590 355, 575 340, 560 340 C 585 320, 595 295, 605 305 Z"
+            fill="#FFFFFF" stroke="#FFFFFF" stroke-width="16" stroke-linejoin="round"/>
+
+      <!-- RED LETTER FILLS -->
+      <!-- 'A' Letter Body -->
+      <path d="M 275 345 C 315 338, 332 355, 322 410 L 296 498 C 293 506, 278 506, 273 496 L 260 442 L 202 447 L 186 496 C 180 507, 164 504, 160 494 L 210 358 C 218 342, 245 342, 275 345 Z"
+            fill="url(#aryRedGrad)"/>
+      <!-- 'A' Inner Hole -->
+      <path d="M 235 418 L 268 415 C 275 414, 278 400, 272 380 C 265 365, 255 365, 248 375 Z" fill="#FFFFFF"/>
+
+      <!-- 'R' Letter Body -->
+      <path d="M 350 348 C 400 340, 465 348, 465 402 C 465 438, 438 454, 408 458 L 472 498 C 480 504, 472 516, 456 516 L 408 516 L 368 466 L 342 466 L 332 506 C 328 514, 316 514, 312 502 L 336 358 Z"
+            fill="url(#aryRedGrad)"/>
+      <!-- 'R' Inner Hole -->
+      <path d="M 362 376 C 392 372, 428 376, 428 402 C 428 424, 398 430, 366 430 Z" fill="#FFFFFF"/>
+
+      <!-- 'Y' Letter Body -->
+      <path d="M 488 350 C 498 345, 512 358, 504 372 L 476 434 L 476 500 C 476 512, 460 512, 456 500 L 456 438 L 416 372 C 408 358, 422 345, 434 350 L 466 402 Z"
+            fill="url(#aryRedGrad)"/>
+      <!-- Right Stem extending into flame -->
+      <path d="M 495 360 C 525 390, 575 410, 610 365 C 618 395, 580 435, 530 460 L 485 500 C 475 510, 460 500, 468 485 L 505 440 Z"
+            fill="url(#aryRedGrad)"/>
+
+      <!-- Flame Fill on Top Right of Y -->
+      <path d="M 605 308 C 622 332, 612 362, 582 376 C 590 354, 578 342, 564 342 C 586 324, 595 300, 605 308 Z"
+            fill="url(#flameGrad)"/>
+      <path d="M 598 322 C 608 338, 602 356, 586 364 C 592 348, 584 340, 575 340 C 588 328, 592 316, 598 322 Z"
+            fill="#FFF59D"/>
+    </g>
+
+    <!-- 9. DYNAMIC ORANGE UNDERLINE WITH ACCENT DOTS -->
+    <path d="M 280 500 C 340 488, 410 488, 465 500 C 410 493, 340 493, 280 500 Z"
+          fill="#FFA000" stroke="#FFA000" stroke-width="6" stroke-linecap="round"/>
+    
+    <!-- Left and right accent marks -->
+    <rect x="202" y="524" width="18" height="5" rx="2.5" fill="#FF9E00"/>
+    <rect x="568" y="524" width="18" height="5" rx="2.5" fill="#FF9E00"/>
+
+    <!-- 10. "Ayam Geprek" SCRIPT TYPOGRAPHY -->
+    <g transform="translate(400, 542)">
+      <!-- Outer White Glow/Stroke -->
+      <text x="0" y="0" text-anchor="middle" font-family="'Brush Script MT', 'Lobster', 'Comic Sans MS', cursive, sans-serif"
+            font-size="52" font-weight="900" font-style="italic" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round">
+        Ayam Geprek
+      </text>
+      <!-- Dark Red Text Fill -->
+      <text x="0" y="0" text-anchor="middle" font-family="'Brush Script MT', 'Lobster', 'Comic Sans MS', cursive, sans-serif"
+            font-size="52" font-weight="900" font-style="italic" fill="#A80D0D">
+        Ayam Geprek
+      </text>
+    </g>
+
+    <!-- 11. RED BRUSH-STROKE SLOGAN BANNER -->
+    <g id="slogan-banner" transform="translate(0, 575)">
+      <!-- Brush Stroke Banner Shape -->
+      <!-- White outline border -->
+      <path d="M 120 50 L 140 38 L 130 30 L 150 22 L 180 28 L 620 28 L 650 20 L 645 32 L 670 40 L 650 52 L 665 62 L 635 68 L 640 78 L 610 75 L 180 75 L 155 80 L 160 68 L 135 65 L 145 55 Z"
+            fill="#FFFFFF" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round"/>
+      <!-- Red Banner Fill -->
+      <path d="M 125 50 L 142 40 L 134 32 L 152 24 L 182 30 L 618 30 L 646 22 L 642 34 L 666 42 L 648 52 L 662 62 L 632 66 L 636 76 L 608 73 L 182 73 L 158 78 L 162 66 L 138 63 L 148 54 Z"
+            fill="url(#emblemRedGrad)"/>
+
+      <!-- Slogan Line 1: GEPREKNYA JUARA, -->
+      <text x="400" y="44" text-anchor="middle" font-family="'Impact', 'Arial Black', sans-serif"
+            font-size="28" font-weight="900" letter-spacing="1.5" fill="#FFFFFF" font-style="italic">
+        GEPREKNYA JUARA,
+      </text>
+
+      <!-- Slogan Line 2: PEDASNYA NAGIH! -->
+      <text x="400" y="69" text-anchor="middle" font-family="'Impact', 'Arial Black', sans-serif"
+            font-size="30" font-weight="900" letter-spacing="1.5" fill="#FFEA00" font-style="italic" stroke="#B71C1C" stroke-width="1">
+        PEDASNYA NAGIH!
+      </text>
+    </g>
+
+  </g>
+</svg>

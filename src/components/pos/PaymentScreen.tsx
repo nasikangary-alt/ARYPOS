@@ -357,7 +357,7 @@ export const PaymentScreen: React.FC<PaymentScreenProps> = ({
 
       {/* Main Scrollable Content */}
       <main
-        className={`flex-1 overflow-y-auto py-3.5 ${containerWidthClass} space-y-3.5`}
+        className={`flex-1 overflow-y-auto overflow-x-hidden no-scrollbar py-3.5 ${containerWidthClass} space-y-3.5`}
       >
         {/* CHANNEL INFO CARD (Read-only context, NO lock icon, NO "Channel Terkunci", NO channel selector) */}
         <div className="bg-white rounded-2xl border border-[#E2E6EC] p-3.5 flex items-center gap-3 shadow-[0_1px_2px_rgba(23,32,51,0.04)]">
@@ -655,7 +655,7 @@ export const PaymentScreen: React.FC<PaymentScreenProps> = ({
       </main>
 
       {/* STICKY BOTTOM PRIMARY CTA (ARY ORANGE) */}
-      <footer className="shrink-0 bg-white border-t border-[#E2E6EC] py-3.5 shadow-[0_-4px_20px_rgba(23,32,51,0.04)]">
+      <footer className="shrink-0 bg-white border-t border-[#E2E6EC] pt-3 pb-[max(0.875rem,env(safe-area-inset-bottom,0.875rem))] shadow-[0_-4px_20px_rgba(23,32,51,0.05)]">
         <div className={containerWidthClass}>
           <button
             id="btn-complete-transaction"

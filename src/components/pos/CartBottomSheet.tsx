@@ -135,9 +135,9 @@ export const CartBottomSheet: React.FC<CartBottomSheetProps> = ({
 
       {/* Main Scrollable Content */}
       <main
-        className={`flex-1 overflow-y-auto py-3.5 ${containerWidthClass} space-y-3.5`}
+        className={`flex-1 overflow-y-auto overflow-x-hidden no-scrollbar py-3.5 ${containerWidthClass} space-y-3.5`}
       >
-        {/* 1. Channel Context Card (Read-only visual indicator, NO channel selector buttons, NO "Channel Terkunci" text) */}
+        {/* 1. Channel Context Card */}
         <div className="bg-white rounded-2xl border border-[#E2E6EC] p-3.5 flex items-center gap-3 shadow-[0_1px_2px_rgba(23,32,51,0.04)]">
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${channelVisuals.iconBg}`}
@@ -182,80 +182,87 @@ export const CartBottomSheet: React.FC<CartBottomSheetProps> = ({
 
               return (
                 <div key={item.product.id} className="py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    {/* Left: Thumbnail & Product Info */}
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <img
-                        src={getProductImageUrl(item.product.name)}
-                        alt={item.product.name}
-                        className="w-[52px] h-[52px] rounded-xl object-cover shrink-0 border border-[#E2E6EC] bg-[#F7F8FA]"
-                        referrerPolicy="no-referrer"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-[14px] font-bold text-[#172033] truncate leading-snug">
-                          {item.product.name}
-                        </h4>
+                  <div className="flex items-start gap-3">
+                    {/* Left: Product Thumbnail */}
+                    <img
+                      src={getProductImageUrl(item.product.name)}
+                      alt={item.product.name}
+                      className="w-[50px] h-[50px] rounded-xl object-cover shrink-0 border border-[#E2E6EC] bg-[#F7F8FA]"
+                      referrerPolicy="no-referrer"
+                    />
 
-                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap tabular-nums">
+                    {/* Middle & Right: Product Info & Quantity Controls */}
+                    <div className="flex-1 min-w-0">
+                      {/* Product Name (Up to 2 lines, no aggressive single-line truncation) */}
+                      <h4 className="text-[14px] font-bold text-[#172033] leading-snug line-clamp-2">
+                        {item.product.name}
+                      </h4>
+
+                      {/* Bottom Row: Unit Selling / Promo Price + Stepper + Item Subtotal */}
+                      <div className="flex items-center justify-between gap-2 mt-2">
+                        {/* Unit price */}
+                        <div className="flex items-center gap-1.5 flex-wrap tabular-nums">
                           {hasPromo ? (
                             <>
-                              <span className="text-xs text-[#667085] line-through font-medium">
+                              <span className="text-[11px] text-[#667085] line-through font-medium">
                                 {formatRupiah(unitOriginal)}
                               </span>
-                              <span className="text-[13px] font-bold text-[#FF6B22]">
+                              <span className="text-xs font-bold text-[#FF6B22]">
                                 {formatRupiah(unitSelling)}
                               </span>
                             </>
                           ) : (
-                            <span className="text-[13px] text-[#667085] font-medium">
+                            <span className="text-xs text-[#667085] font-medium">
                               {formatRupiah(unitSelling)}
                             </span>
                           )}
                         </div>
-                      </div>
-                    </div>
 
-                    {/* Right: Stepper & Item Subtotal */}
-                    <div className="flex items-center gap-4 shrink-0">
-                      <div className="flex items-center border border-[#E2E6EC] rounded-xl bg-[#F7F8FA] h-8 px-1">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateCartQuantity(
-                              item.product.id,
-                              item.quantity - 1
-                            )
-                          }
-                          className="w-7 h-7 flex items-center justify-center text-[#172033] hover:bg-white rounded-lg active:scale-95 transition cursor-pointer"
-                        >
-                          <Minus className="w-3.5 h-3.5 stroke-[2.2]" />
-                        </button>
-                        <span className="w-7 text-center text-xs font-extrabold text-[#172033] tabular-nums">
-                          {item.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateCartQuantity(
-                              item.product.id,
-                              item.quantity + 1
-                            )
-                          }
-                          className="w-7 h-7 flex items-center justify-center text-[#172033] hover:bg-white rounded-lg active:scale-95 transition cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5 stroke-[2.2]" />
-                        </button>
-                      </div>
+                        {/* Stepper and Item Subtotal */}
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          <div className="flex items-center border border-[#E2E6EC] rounded-xl bg-[#F7F8FA] h-7.5 px-0.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateCartQuantity(
+                                  item.product.id,
+                                  item.quantity - 1
+                                )
+                              }
+                              className="w-6.5 h-6.5 flex items-center justify-center text-[#172033] hover:bg-white rounded-lg active:scale-95 transition cursor-pointer"
+                              title="Kurangi"
+                            >
+                              <Minus className="w-3 h-3 stroke-[2.2]" />
+                            </button>
+                            <span className="w-6 text-center text-xs font-extrabold text-[#172033] tabular-nums">
+                              {item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateCartQuantity(
+                                  item.product.id,
+                                  item.quantity + 1
+                                )
+                              }
+                              className="w-6.5 h-6.5 flex items-center justify-center text-[#172033] hover:bg-white rounded-lg active:scale-95 transition cursor-pointer"
+                              title="Tambah"
+                            >
+                              <Plus className="w-3 h-3 stroke-[2.2]" />
+                            </button>
+                          </div>
 
-                      <div className="text-right tabular-nums min-w-[90px]">
-                        {hasPromo && (
-                          <span className="text-[11px] text-[#667085] line-through block">
-                            {formatRupiah(unitOriginal * item.quantity)}
-                          </span>
-                        )}
-                        <span className="text-[14px] font-extrabold text-[#172033]">
-                          {formatRupiah(unitSelling * item.quantity)}
-                        </span>
+                          <div className="text-right tabular-nums min-w-[70px]">
+                            {hasPromo && (
+                              <span className="text-[10px] text-[#667085] line-through block leading-tight">
+                                {formatRupiah(unitOriginal * item.quantity)}
+                              </span>
+                            )}
+                            <span className="text-[13.5px] font-extrabold text-[#172033]">
+                              {formatRupiah(unitSelling * item.quantity)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -290,7 +297,7 @@ export const CartBottomSheet: React.FC<CartBottomSheetProps> = ({
 
       {/* Sticky Bottom Footer: Total Makanan & Lanjut ke Pembayaran */}
       {cart.length > 0 && (
-        <footer className="shrink-0 bg-white border-t border-[#E2E6EC] py-3.5 shadow-[0_-4px_20px_rgba(23,32,51,0.04)]">
+        <footer className="shrink-0 bg-white border-t border-[#E2E6EC] pt-3 pb-[max(0.875rem,env(safe-area-inset-bottom,0.875rem))] shadow-[0_-4px_20px_rgba(23,32,51,0.05)]">
           <div className={`${containerWidthClass} space-y-3`}>
             <div className="space-y-1 tabular-nums">
               {cartItemDiscountTotal > 0 && (

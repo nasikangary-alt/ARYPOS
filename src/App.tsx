@@ -253,7 +253,7 @@ const MainLayout: React.FC = () => {
       </div>
 
       {/* Smartphone Frame Container */}
-      <div className="w-full max-w-[430px] min-h-screen bg-[#F7F8FA] shadow-2xl relative flex flex-col border-x border-[#E8ECF2] app-mobile-shell">
+      <div className="w-full max-w-[430px] min-h-screen bg-[#F7F8FA] shadow-2xl relative flex flex-col border-x border-[#E8ECF2] app-mobile-shell overflow-x-hidden">
         {/* Mobile Header Bar */}
         <MobileHeader
           activeTab={activeTab}

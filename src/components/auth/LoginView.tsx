@@ -87,18 +87,16 @@ export const LoginView: React.FC = () => {
         onSubmit={handleSubmit}
         className="w-full max-w-[360px] h-full max-h-[680px] flex flex-col justify-between py-1"
       >
-        {/* 1. Brand & Logo Header */}
+        {/* 1. Master Brand & Logo Header */}
         <div className="flex flex-col items-center text-center pt-1">
-          <div className="w-[68px] h-[68px] rounded-[20px] bg-gradient-to-br from-[#FF641F] to-[#D92D20] flex items-center justify-center shadow-[0_8px_24px_rgba(255,100,31,0.24)] ring-1 ring-black/5 mb-2.5">
-            <span className="text-[32px] leading-none" role="img" aria-label="Ayam Geprek ARY">
-              🍗
-            </span>
-          </div>
-          <h1 className="text-[19px] font-extrabold tracking-tight text-[#172033] leading-tight">
-            AYAM GEPREK ARY
-          </h1>
-          <p className="text-[11px] font-semibold tracking-[0.08em] text-[#8E8E93] uppercase mt-0.5">
-            POS &amp; OPERASIONAL
+          <img
+            src="/ary-logo-full.svg"
+            alt="Ayam Geprek ARY - Gepreknya Juara, Pedasnya Nagih!"
+            className="w-auto h-[90px] object-contain mb-1.5 drop-shadow-sm select-none"
+            referrerPolicy="no-referrer"
+          />
+          <p className="text-[11px] font-bold tracking-[0.1em] text-[#FF641F] uppercase mt-0.5">
+            POS &amp; OPERASIONAL RESTO
           </p>
         </div>
 

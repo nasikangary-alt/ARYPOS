@@ -10,6 +10,7 @@ import {
   parseNumberInput,
 } from '../../utils/formatters';
 import { PurchaseReceiptModal } from './PurchaseReceiptModal';
+import { PurchaseStatusBadge, PurchaseSyncBadge } from './PurchaseStatusBadge';
 import {
   ArrowLeft,
   Edit,
@@ -28,6 +29,8 @@ import {
   MoreVertical,
   Share2,
   Check,
+  RefreshCw,
+  WifiOff,
 } from 'lucide-react';
 
 interface PurchaseDetailProps {
@@ -45,7 +48,15 @@ export const PurchaseDetail: React.FC<PurchaseDetailProps> = ({
   onDeleted,
   isDesktopWide = false,
 }) => {
-  const { purchases, deletePurchase, addPurchasePayment, deletePurchasePayment } = useApp();
+  const {
+    purchases,
+    deletePurchase,
+    addPurchasePayment,
+    deletePurchasePayment,
+    triggerManualSync,
+    isSyncingPurchases,
+    isOnline,
+  } = useApp();
   const { currentRole } = useAuth();
 
   const purchase = purchases.find(p => p.id === purchaseId);
@@ -225,12 +236,28 @@ export const PurchaseDetail: React.FC<PurchaseDetailProps> = ({
             <h1 className="text-xl sm:text-2xl font-black text-[#172033] tracking-tight">
               Detil Tagihan Pembelian {purchase.purchaseNo || purchase.invoiceNo}
             </h1>
-            <div>
+            <div className="flex items-center gap-2 flex-wrap">
               <span
                 className={`inline-block px-3 py-1 rounded-lg text-xs font-bold border ${statusColorClass}`}
               >
                 {statusLabel}
               </span>
+              <PurchaseSyncBadge
+                isOfflineSync={purchase.isOfflineSync}
+                syncStatus={purchase.syncStatus}
+                size="md"
+              />
+              {purchase.isOfflineSync && isOnline && (
+                <button
+                  type="button"
+                  onClick={triggerManualSync}
+                  disabled={isSyncingPurchases}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isSyncingPurchases ? 'animate-spin' : ''}`} />
+                  <span>Sinkronkan</span>
+                </button>
+              )}
             </div>
           </div>
 

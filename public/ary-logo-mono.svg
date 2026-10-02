@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 180" width="640" height="180" fill="none">
+  <!-- Left: Monochrome Geometric Chicken Mark in Rounded Badge -->
+  <g transform="translate(20, 20)">
+    <!-- Dark Charcoal Badge Container -->
+    <rect width="140" height="140" rx="34" fill="#0F172A"/>
+
+    <!-- Geometric Mascot Inside Badge (White & Negative Space) -->
+    <g transform="translate(70, 65) scale(0.62)">
+      <!-- 3 Comb Lobes -->
+      <path d="M -60 -105 C -80 -145, -35 -165, -10 -130 C -5 -125, -2 -115, -5 -105 Z" fill="#FFFFFF"/>
+      <path d="M -15 -125 C -5 -175, 45 -170, 45 -118 C 45 -105, 38 -95, 30 -90 Z" fill="#FFFFFF"/>
+      <path d="M 35 -115 C 60 -150, 95 -120, 80 -85 C 75 -75, 65 -70, 55 -68 Z" fill="#FFFFFF"/>
+
+      <!-- Head & Neck -->
+      <path d="M -75 -65 C -75 -110, -10 -115, 60 -70 C 85 -55, 95 -30, 85 5 C 75 40, 45 75, -25 85 C -65 90, -90 70, -90 35 C -90 0, -75 -35, -75 -65 Z" fill="#FFFFFF"/>
+
+      <!-- Eye -->
+      <circle cx="28" cy="-32" r="10" fill="#0F172A"/>
+      <circle cx="25" cy="-35" r="3.5" fill="#FFFFFF"/>
+
+      <!-- Beak -->
+      <path d="M 72 -38 L 128 -15 L 75 10 Z" fill="#FFFFFF"/>
+
+      <!-- Wattle -->
+      <path d="M 45 12 C 45 12, 40 50, 62 52 C 78 54, 82 25, 75 5 Z" fill="#0F172A"/>
+
+      <!-- Cheek Accent -->
+      <path d="M -45 -20 C -20 -40, 20 -25, 35 -5" fill="none" stroke="#0F172A" stroke-width="6" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <!-- Right: Monochrome Typography -->
+  <g transform="translate(185, 30)">
+    <!-- Primary "ARY" -->
+    <text x="0" y="72" font-family="'Plus Jakarta Sans', 'Inter', -apple-system, system-ui, sans-serif"
+          font-weight="900" font-size="76" letter-spacing="-1" fill="#0F172A">
+      ARY
+    </text>
+
+    <!-- POS Badge -->
+    <g transform="translate(195, 16)">
+      <rect width="78" height="42" rx="12" fill="#F1F5F9" stroke="#CBD5E1" stroke-width="1.5"/>
+      <text x="39" y="27" text-anchor="middle" font-family="'Plus Jakarta Sans', 'Inter', -apple-system, system-ui, sans-serif"
+            font-weight="800" font-size="20" letter-spacing="1.5" fill="#0F172A">
+        POS
+      </text>
+    </g>
+
+    <!-- Subtitle -->
+    <g transform="translate(2, 110)">
+      <text x="0" y="0" font-family="'Plus Jakarta Sans', 'Inter', -apple-system, system-ui, sans-serif"
+            font-weight="700" font-size="16" letter-spacing="3" fill="#334155">
+        AYAM GEPREK
+      </text>
+      <circle cx="160" cy="-5" r="3" fill="#94A3B8"/>
+      <text x="175" y="0" font-family="'Plus Jakarta Sans', 'Inter', -apple-system, system-ui, sans-serif"
+            font-weight="600" font-size="15" letter-spacing="1.5" fill="#64748B">
+        SISTEM KASIR &amp; RESTO
+      </text>
+    </g>
+  </g>
+</svg>

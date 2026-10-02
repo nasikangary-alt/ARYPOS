@@ -1,7 +1,7 @@
 import React from 'react';
 
 export interface AryBrandLogoProps {
-  variant?: 'full' | 'icon' | 'badge';
+  variant?: 'full' | 'icon' | 'badge' | 'mono';
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'custom';
   className?: string;
   alt?: string;
@@ -10,9 +10,9 @@ export interface AryBrandLogoProps {
 const SIZE_MAP_FULL = {
   xs: 'h-8 w-auto',
   sm: 'h-12 w-auto',
-  md: 'h-20 w-auto',
-  lg: 'h-28 w-auto',
-  xl: 'h-36 w-auto',
+  md: 'h-18 w-auto',
+  lg: 'h-24 w-auto',
+  xl: 'h-32 w-auto',
   custom: '',
 };
 
@@ -29,7 +29,7 @@ export const AryBrandLogo: React.FC<AryBrandLogoProps> = ({
   variant = 'full',
   size = 'md',
   className = '',
-  alt = 'Ayam Geprek ARY',
+  alt = 'ARY POS - Ayam Geprek',
 }) => {
   if (variant === 'icon') {
     return (
@@ -37,6 +37,17 @@ export const AryBrandLogo: React.FC<AryBrandLogoProps> = ({
         src="/ary-logo-icon.svg"
         alt={alt}
         className={`object-contain shadow-xs select-none ${SIZE_MAP_ICON[size]} ${className}`}
+        referrerPolicy="no-referrer"
+      />
+    );
+  }
+
+  if (variant === 'mono') {
+    return (
+      <img
+        src="/ary-logo-mono.svg"
+        alt={alt}
+        className={`object-contain select-none ${SIZE_MAP_FULL[size]} ${className}`}
         referrerPolicy="no-referrer"
       />
     );
@@ -55,7 +66,7 @@ export const AryBrandLogo: React.FC<AryBrandLogoProps> = ({
     );
   }
 
-  // Master Full Logo (Transparent background)
+  // Master Full Horizontal Logo (Transparent background)
   return (
     <img
       src="/ary-logo-full.svg"

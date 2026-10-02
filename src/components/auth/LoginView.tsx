@@ -91,13 +91,10 @@ export const LoginView: React.FC = () => {
         <div className="flex flex-col items-center text-center pt-1">
           <img
             src="/ary-logo-full.svg"
-            alt="Ayam Geprek ARY - Gepreknya Juara, Pedasnya Nagih!"
-            className="w-auto h-[90px] object-contain mb-1.5 drop-shadow-sm select-none"
+            alt="Ayam Geprek ARY"
+            className="w-auto h-[92px] max-w-[290px] object-contain mb-1 drop-shadow-xs select-none"
             referrerPolicy="no-referrer"
           />
-          <p className="text-[11px] font-bold tracking-[0.1em] text-[#FF641F] uppercase mt-0.5">
-            POS &amp; OPERASIONAL RESTO
-          </p>
         </div>
 
         {/* 2. Username Input & Error Feedback */}

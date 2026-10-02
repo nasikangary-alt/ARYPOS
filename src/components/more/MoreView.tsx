@@ -669,7 +669,7 @@ export const MoreView: React.FC<MoreViewProps> = ({ onNavigateTab }) => {
             <img
               src="/ary-logo-full.svg"
               alt="Ayam Geprek ARY"
-              className="h-28 w-auto mx-auto object-contain drop-shadow-sm select-none"
+              className="h-28 w-auto mx-auto object-contain drop-shadow-xs select-none"
               referrerPolicy="no-referrer"
             />
             <div>

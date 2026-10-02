@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Purchase, PurchaseItem, Vendor } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { getCachedVendors } from '../../services/offlineDatabase';
 import {
   formatRupiah,
   formatNumber,
@@ -24,6 +25,7 @@ import {
   CheckCircle2,
   DollarSign,
   HelpCircle,
+  Clock,
 } from 'lucide-react';
 
 interface PurchaseFormProps {
@@ -65,8 +67,25 @@ export const PurchaseForm: React.FC<PurchaseFormProps> = ({
     createPurchase,
     updatePurchase,
     addVendor,
+    isOnline,
   } = useApp();
   const { currentRole } = useAuth();
+
+  const [idbVendors, setIdbVendors] = useState<Vendor[]>([]);
+  useEffect(() => {
+    if (!vendors || vendors.length === 0) {
+      getCachedVendors().then(cached => {
+        if (cached && cached.length > 0) {
+          setIdbVendors(cached);
+        }
+      }).catch(() => {});
+    }
+  }, [vendors]);
+
+  const effectiveVendors = useMemo(() => {
+    if (vendors && vendors.length > 0) return vendors;
+    return idbVendors;
+  }, [vendors, idbVendors]);
 
   const isEditMode = Boolean(initialPurchase && initialPurchase.id);
 
@@ -641,6 +660,16 @@ export const PurchaseForm: React.FC<PurchaseFormProps> = ({
         </div>
       )}
 
+      {/* Offline Mode Alert */}
+      {!isOnline && (
+        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-800 flex items-center gap-2.5 shadow-2xs">
+          <Clock className="w-4 h-4 shrink-0 text-amber-600" />
+          <span>
+            Mode Offline Aktif: Transaksi pembelian akan langsung menambah stok lokal di IndexedDB dan disinkronkan otomatis saat kembali online.
+          </span>
+        </div>
+      )}
+
       {/* FORM CONTAINER */}
       <form onSubmit={handleSubmitPurchase} className="space-y-5">
         {/* CARD 1: INFORMASI VENDOR & TRANSAKSI */}
@@ -671,7 +700,7 @@ export const PurchaseForm: React.FC<PurchaseFormProps> = ({
                 onChange={e => {
                   const val = e.target.value;
                   setVendorId(val);
-                  const v = vendors.find(item => item.id === val);
+                  const v = effectiveVendors.find(item => item.id === val);
                   if (v) {
                     setVendorName(v.name);
                   }
@@ -679,7 +708,7 @@ export const PurchaseForm: React.FC<PurchaseFormProps> = ({
                 className="w-full px-3 py-2.5 rounded-xl border border-[#E8ECF2] bg-[#F7F8FA] text-xs font-bold text-[#172033] focus:outline-none focus:border-[#FF641F] focus:bg-white transition cursor-pointer"
               >
                 <option value="">-- Pilih Supplier Terdaftar --</option>
-                {vendors.map(v => (
+                {effectiveVendors.map(v => (
                   <option key={v.id} value={v.id}>
                     {v.name} {v.contactName ? `(${v.contactName})` : ''}
                   </option>

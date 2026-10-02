@@ -87,22 +87,25 @@ define(['./workbox-43e44e5a'], (function (workbox) { 'use strict';
     "revision": "c18cb4360b89f16adefa4d93ddd49aec"
   }, {
     "url": "index.html",
-    "revision": "d338c68b18c1acddd8236d25120388c9"
+    "revision": "1dae36378e6a0f6a0b1cddae756c4b21"
   }, {
     "url": "icon.svg",
-    "revision": "4c99e4e47b1d0d14cfe786389dc25b5a"
+    "revision": "b9e9d2e5be0ef49a83ebb7f054962762"
   }, {
     "url": "icon-maskable.svg",
-    "revision": "3e1070359fe97987fcc97678e7ec6e65"
+    "revision": "0c296509afc06b1d4f5d03f3f7840489"
   }, {
     "url": "favicon.ico",
     "revision": "e5c4b73e3f5b1d2d97e220a1bf5b606f"
   }, {
+    "url": "ary-logo-mono.svg",
+    "revision": "4bebfa1ab2ba7a4aebbf2ddb4d60c4ab"
+  }, {
     "url": "ary-logo-icon.svg",
-    "revision": "4c99e4e47b1d0d14cfe786389dc25b5a"
+    "revision": "48275f48e664dfd4988d307bf3ad272d"
   }, {
     "url": "ary-logo-full.svg",
-    "revision": "a19daaf6f1dbb517b942493b870cb7dd"
+    "revision": "94767c3b348bf5224713e9c1f3368ff6"
   }, {
     "url": "apple-touch-icon.png",
     "revision": "cf0fc2854409324fa3cad41247d2a93a"
@@ -116,38 +119,38 @@ define(['./workbox-43e44e5a'], (function (workbox) { 'use strict';
     "url": "assets/jspdf.plugin.autotable-BrAqd2M3.js",
     "revision": null
   }, {
-    "url": "assets/jspdf.es.min-EkMjozEO.js",
+    "url": "assets/jspdf.es.min-C-PRLyu0.js",
     "revision": null
   }, {
-    "url": "assets/index.es-CKqbnUjL.js",
+    "url": "assets/index.es-iv-9IXoH.js",
     "revision": null
   }, {
-    "url": "assets/index-CjJtQN7H.js",
+    "url": "assets/index-C12hnudV.css",
     "revision": null
   }, {
-    "url": "assets/index-C75mvKOt.css",
+    "url": "assets/index-C0pn_7tK.js",
     "revision": null
   }, {
-    "url": "assets/html2canvas-DSlaktab.js",
+    "url": "assets/html2canvas-D69PE284.js",
     "revision": null
   }, {
     "url": "apple-touch-icon.png",
     "revision": "cf0fc2854409324fa3cad41247d2a93a"
   }, {
     "url": "ary-logo-full.svg",
-    "revision": "a19daaf6f1dbb517b942493b870cb7dd"
+    "revision": "94767c3b348bf5224713e9c1f3368ff6"
   }, {
     "url": "ary-logo-icon.svg",
-    "revision": "4c99e4e47b1d0d14cfe786389dc25b5a"
+    "revision": "48275f48e664dfd4988d307bf3ad272d"
   }, {
     "url": "favicon.ico",
     "revision": "e5c4b73e3f5b1d2d97e220a1bf5b606f"
   }, {
     "url": "icon-maskable.svg",
-    "revision": "3e1070359fe97987fcc97678e7ec6e65"
+    "revision": "0c296509afc06b1d4f5d03f3f7840489"
   }, {
     "url": "icon.svg",
-    "revision": "4c99e4e47b1d0d14cfe786389dc25b5a"
+    "revision": "b9e9d2e5be0ef49a83ebb7f054962762"
   }, {
     "url": "pwa-192x192.png",
     "revision": "c18cb4360b89f16adefa4d93ddd49aec"

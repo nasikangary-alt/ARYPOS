@@ -1,141 +1,147 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <!-- Background Gradient (Vibrant Red to Orange) -->
-    <linearGradient id="bgRedOrange" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#C62828"/>
-      <stop offset="40%" stop-color="#E53935"/>
-      <stop offset="75%" stop-color="#FF6D00"/>
-      <stop offset="100%" stop-color="#FF9100"/>
-    </linearGradient>
-
-    <!-- ARY Lettering Red Gradient -->
-    <linearGradient id="iconAryRed" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#FF1744"/>
-      <stop offset="65%" stop-color="#D50000"/>
-      <stop offset="100%" stop-color="#8E0000"/>
-    </linearGradient>
-
-    <!-- Flame Gradient -->
-    <linearGradient id="iconFlameGrad" x1="0%" y1="100%" x2="0%" y2="0%">
-      <stop offset="0%" stop-color="#FF3D00"/>
-      <stop offset="50%" stop-color="#FF9100"/>
-      <stop offset="100%" stop-color="#FFEA00"/>
+    <!-- Background Gradient: Vibrant Red to Warm Orange -->
+    <linearGradient id="appIconBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E51926"/>
+      <stop offset="35%" stop-color="#F23618"/>
+      <stop offset="70%" stop-color="#FF6A14"/>
+      <stop offset="100%" stop-color="#FF9000"/>
     </linearGradient>
 
     <!-- Beak Gradient -->
-    <linearGradient id="iconBeakGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFD600"/>
-      <stop offset="100%" stop-color="#FF9100"/>
+    <linearGradient id="beakYellowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD54F"/>
+      <stop offset="100%" stop-color="#FFA000"/>
     </linearGradient>
 
-    <!-- App Icon Shadow -->
-    <filter id="iconElementShadow" x="-15%" y="-15%" width="130%" height="130%">
-      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.25"/>
+    <!-- Comb Highlight Gradient -->
+    <linearGradient id="combHighlightGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Drop Shadow for 3D depth -->
+    <filter id="mascotShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#800606" flood-opacity="0.4"/>
     </filter>
   </defs>
 
-  <!-- Background Rounded Square (Squircle) -->
-  <rect width="512" height="512" rx="116" fill="url(#bgRedOrange)"/>
+  <!-- 1. Background Squircle (Rounded Square) -->
+  <rect width="512" height="512" rx="116" fill="url(#appIconBgGrad)"/>
 
-  <!-- Subtle Inner Ring Highlight -->
-  <rect x="14" y="14" width="484" height="484" rx="104" fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="4"/>
+  <!-- Subtle Shading Accents on Background -->
+  <path d="M 0 0 L 220 0 C 180 80, 100 160, 0 200 Z" fill="#FFFFFF" fill-opacity="0.08"/>
+  <path d="M 512 512 L 320 512 C 360 420, 430 360, 512 320 Z" fill="#8E0808" fill-opacity="0.15"/>
 
-  <!-- Centered Mascot & ARY Master Graphics -->
-  <g transform="translate(256, 245) scale(0.92)" filter="url(#iconElementShadow)">
+  <!-- 2. Master Artwork Group (Rooster Mascot + ARY 3D Typography) -->
+  <g id="master-artwork" filter="url(#mascotShadow)">
 
-    <!-- 1. BACK RED CREST / HALO BEHIND HEAD -->
-    <!-- White outer stroke -->
-    <path d="M -90 -60 C -105 -130, -35 -165, 35 -165 C 100 -165, 150 -130, 140 -60 C 133 -15, 100 20, 45 25 C -30 30, -80 -5, -90 -60 Z"
-          fill="#FFFFFF" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round"/>
-    <!-- Red Fill -->
-    <path d="M -87 -60 C -100 -125, -33 -160, 35 -160 C 95 -160, 143 -125, 135 -60 C 129 -20, 95 15, 43 20 C -25 25, -77 -10, -87 -60 Z"
-          fill="#D50000"/>
+    <!-- A. ROOSTER CHARACTER -->
+    <g id="rooster-character">
+      <!-- Dark Red Thick Outline / Silhouette Contour -->
+      <!-- Comb Silhouette -->
+      <path d="M 230 80 C 180 75, 175 145, 195 175 C 220 150, 245 130, 280 135 C 265 95, 305 60, 340 85 C 375 70, 415 110, 395 155 C 420 170, 425 210, 395 240 C 390 280, 340 300, 290 290 C 210 295, 160 250, 150 180 C 145 150, 180 85, 230 80 Z"
+            fill="#8E0808" stroke="#8E0808" stroke-width="12" stroke-linejoin="round"/>
 
-    <!-- 2. CHICKEN WHITE HEAD -->
-    <!-- White Silhouette with clean stroke -->
-    <path d="M -105 30 C -105 20, -65 -85, 40 -90 C 95 -92, 120 -55, 105 -10 C 95 15, 65 35, 5 45 C -55 55, -100 45, -105 30 Z"
-          fill="#FFFFFF" stroke="#FFFFFF" stroke-width="14" stroke-linejoin="round"/>
-    <path d="M -100 30 C -90 -60, -25 -85, 50 -85 C 100 -85, 115 -50, 100 -10 C 90 15, 60 40, -5 45 C -55 50, -95 40, -100 30 Z"
-          fill="#FFFFFF"/>
-
-    <!-- 3. ROOSTER COMB -->
-    <g>
-      <path d="M -40 -80 C -60 -130, -10 -155, 20 -120 C 40 -160, 90 -155, 95 -110 C 120 -125, 145 -95, 125 -65 Z"
-            fill="#FFFFFF" stroke="#FFFFFF" stroke-width="10" stroke-linejoin="round"/>
-      <path d="M -37 -82 C -53 -125, -10 -148, 17 -115 C 40 -152, 85 -148, 90 -108 C 113 -120, 137 -92, 120 -68 Z"
-            fill="#D50000"/>
-    </g>
-
-    <!-- 4. ROOSTER EYE -->
-    <circle cx="50" cy="-55" r="14" fill="#1A1A1A"/>
-    <circle cx="46" cy="-59" r="5" fill="#FFFFFF"/>
-    <circle cx="53" cy="-52" r="2.5" fill="#FFFFFF"/>
-
-    <!-- 5. SQUAWKING OPEN BEAK -->
-    <path d="M 80 -65 L 140 -55 L 100 -15 L 77 -35 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round"/>
-    <path d="M 81 -62 L 135 -52 L 93 -34 Z" fill="url(#iconBeakGrad)"/>
-    <path d="M 91 -34 L 125 -45 L 97 -18 Z" fill="#FF8F00"/>
-    <path d="M 85 -50 L 115 -48 L 90 -30 Z" fill="#8E0000"/>
-
-    <!-- 6. RED WATTLE -->
-    <path d="M 55 -30 C 55 -30, 45 15, 67 22 C 85 28, 93 0, 85 -25 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="8"/>
-    <path d="M 57 -28 C 57 -28, 49 12, 67 18 C 81 22, 89 -2, 83 -24 Z" fill="#D50000"/>
-
-    <!-- 7. SOUND WAVES -->
-    <g fill="#FFD54F" stroke="#FFFFFF" stroke-width="2">
-      <path d="M 150 -80 C 160 -82, 170 -76, 175 -70 C 165 -68, 157 -72, 150 -80 Z"/>
-      <path d="M 157 -50 C 173 -52, 185 -47, 190 -42 C 175 -38, 165 -42, 157 -50 Z"/>
-      <path d="M 147 -25 C 160 -20, 167 -12, 170 -5 C 157 -8, 151 -16, 147 -25 Z"/>
-    </g>
-
-    <!-- 8. "ARY" 3D LETTERING EMBLEM -->
-    <g transform="translate(-250, -180)">
-      <!-- White Base for ARY -->
-      <!-- A -->
-      <path d="M 165 220 C 210 210, 225 230, 215 290 L 185 385 C 180 395, 155 395, 145 380 L 135 330 L 85 335 L 65 385 C 55 400, 30 395, 25 380 L 85 235 C 95 215, 130 215, 165 220 Z"
-            fill="#FFFFFF" stroke="#FFFFFF" stroke-width="20" stroke-linejoin="round" stroke-linecap="round"/>
-      <!-- R -->
-      <path d="M 225 220 C 285 210, 360 220, 360 285 C 360 325, 330 345, 295 350 L 365 385 C 375 392, 365 405, 345 405 L 285 405 L 245 355 L 225 355 L 215 395 C 210 405, 190 405, 185 390 L 210 230 Z"
-            fill="#FFFFFF" stroke="#FFFFFF" stroke-width="20" stroke-linejoin="round" stroke-linecap="round"/>
-      <!-- Y -->
-      <path d="M 365 225 C 380 220, 400 235, 390 255 L 360 320 L 360 385 C 360 400, 335 400, 330 385 L 330 325 L 285 255 C 275 235, 295 220, 310 225 L 345 280 Z"
-            fill="#FFFFFF" stroke="#FFFFFF" stroke-width="20" stroke-linejoin="round" stroke-linecap="round"/>
-      <!-- Flame on Y -->
-      <path d="M 485 185 C 505 210, 495 245, 460 260 C 470 235, 455 220, 440 220 C 465 200, 475 175, 485 185 Z"
-            fill="#FFFFFF" stroke="#FFFFFF" stroke-width="16" stroke-linejoin="round"/>
-
-      <!-- Red Letters -->
-      <path d="M 155 225 C 195 218, 212 235, 202 290 L 176 378 C 173 386, 158 386, 153 376 L 140 322 L 82 327 L 66 376 C 60 387, 44 384, 40 374 L 90 238 C 98 222, 125 222, 155 225 Z"
-            fill="url(#iconAryRed)"/>
-      <path d="M 115 298 L 148 295 C 155 294, 158 280, 152 260 C 145 245, 135 245, 128 255 Z" fill="#FFFFFF"/>
-
-      <path d="M 230 228 C 280 220, 345 228, 345 282 C 345 318, 318 334, 288 338 L 352 378 C 360 384, 352 396, 336 396 L 288 396 L 248 346 L 222 346 L 212 386 C 208 394, 196 394, 192 382 L 216 238 Z"
-            fill="url(#iconAryRed)"/>
-      <path d="M 242 256 C 272 252, 308 256, 308 282 C 308 304, 278 310, 246 310 Z" fill="#FFFFFF"/>
-
-      <path d="M 368 230 C 378 225, 392 238, 384 252 L 356 314 L 356 380 C 356 392, 340 392, 336 380 L 336 318 L 296 252 C 288 238, 302 225, 314 230 L 346 282 Z"
-            fill="url(#iconAryRed)"/>
-      <path d="M 375 240 C 405 270, 455 290, 490 245 C 498 275, 460 315, 410 340 L 365 380 C 355 390, 340 380, 348 365 L 385 320 Z"
-            fill="url(#iconAryRed)"/>
-
-      <!-- Flame fill -->
-      <path d="M 485 188 C 502 212, 492 242, 462 256 C 470 234, 458 222, 444 222 C 466 204, 475 180, 485 188 Z"
-            fill="url(#iconFlameGrad)"/>
-      <path d="M 478 202 C 488 218, 482 236, 466 244 C 472 228, 464 220, 455 220 C 468 208, 472 196, 478 202 Z"
-            fill="#FFF59D"/>
-    </g>
-
-    <!-- 9. "AYAM GEPREK" BADGE UNDER ARY -->
-    <g transform="translate(0, 185)">
-      <!-- Orange curved accent -->
-      <path d="M -90 0 C -30 -10, 30 -10, 90 0 C 30 -6, -30 -6, -90 0 Z" fill="#FFA000" stroke="#FFA000" stroke-width="4"/>
+      <!-- Red Comb (3 Rounded Lobes with highlights) -->
+      <!-- Main Comb Body -->
+      <path d="M 232 85 C 190 85, 185 145, 205 170 C 235 145, 255 130, 290 138 C 275 98, 310 68, 342 90 C 375 78, 410 115, 392 155 C 418 172, 418 208, 392 235 C 375 255, 335 265, 295 260 C 240 260, 195 230, 185 175 C 180 145, 200 95, 232 85 Z"
+            fill="#E51926"/>
       
-      <!-- Ayam Geprek Text -->
-      <text x="0" y="24" text-anchor="middle" font-family="'Brush Script MT', 'Lobster', cursive, sans-serif"
-            font-size="34" font-weight="900" font-style="italic" fill="#FFFFFF" stroke="#D50000" stroke-width="6" stroke-linejoin="round" paint-order="stroke fill">
-        Ayam Geprek
-      </text>
+      <!-- Comb White Top Rim Highlights -->
+      <path d="M 215 105 C 230 90, 255 90, 265 102" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-opacity="0.8"/>
+      <path d="M 315 82 C 335 75, 355 80, 368 95" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-opacity="0.8"/>
+      <path d="M 388 115 C 405 125, 410 145, 402 165" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-opacity="0.8"/>
+
+      <!-- Rooster White Head & Neck -->
+      <!-- Outer Stroke -->
+      <path d="M 170 230 C 155 200, 190 135, 265 135 C 335 135, 370 185, 360 245 C 350 295, 305 325, 235 325 C 185 325, 155 275, 170 230 Z"
+            fill="#8E0808" stroke="#8E0808" stroke-width="12" stroke-linejoin="round"/>
+      <!-- White Face Fill -->
+      <path d="M 172 230 C 160 202, 192 140, 265 140 C 332 140, 365 188, 355 245 C 345 292, 302 320, 235 320 C 188 320, 160 272, 172 230 Z"
+            fill="#FFFFFF"/>
+
+      <!-- Soft Grey Shading on Back of Head & Neck -->
+      <path d="M 175 220 C 180 180, 215 145, 255 142 C 220 155, 195 190, 192 235 C 190 270, 205 295, 235 315 C 200 310, 175 275, 175 220 Z"
+            fill="#E8ECF2"/>
+
+      <!-- Rooster Eye (Black Round Eye with White Specular Reflection) -->
+      <circle cx="282" cy="188" r="14" fill="#1A1A1A"/>
+      <circle cx="278" cy="184" r="5" fill="#FFFFFF"/>
+      <circle cx="285" cy="191" r="2.5" fill="#FFFFFF"/>
+
+      <!-- Open Squawking Beak (Yellow-Orange with dark red interior) -->
+      <!-- Outer Contour -->
+      <path d="M 315 175 L 395 190 L 335 248 L 305 220 Z" fill="#8E0808" stroke="#8E0808" stroke-width="10" stroke-linejoin="round"/>
+      <!-- Upper Beak -->
+      <path d="M 316 178 L 390 192 L 328 218 Z" fill="url(#beakYellowGrad)"/>
+      <!-- Lower Beak -->
+      <path d="M 326 218 L 372 205 L 334 244 Z" fill="#FF8F00"/>
+      <!-- Mouth Interior -->
+      <path d="M 322 198 L 360 200 L 328 222 Z" fill="#8E0808"/>
+
+      <!-- Red Wattle (Rounded Teardrop under Beak) -->
+      <path d="M 285 225 C 285 225, 275 285, 305 290 C 330 295, 340 255, 325 225 Z" fill="#8E0808" stroke="#8E0808" stroke-width="8"/>
+      <path d="M 288 228 C 288 228, 280 280, 305 285 C 324 288, 332 255, 322 228 Z" fill="#E51926"/>
+      <path d="M 295 240 C 295 265, 305 278, 314 278" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-opacity="0.6"/>
+
+      <!-- 3 Yellow Sound Sparks / Accent Waves -->
+      <g fill="#FFD54F" stroke="#8E0808" stroke-width="3">
+        <!-- Top Spark -->
+        <path d="M 405 160 C 420 152, 435 158, 442 165 C 430 172, 418 168, 405 160 Z"/>
+        <!-- Middle Spark -->
+        <path d="M 418 198 C 440 195, 458 205, 462 215 C 442 218, 428 210, 418 198 Z"/>
+        <!-- Bottom Spark -->
+        <path d="M 402 240 C 420 250, 432 265, 435 275 C 418 268, 410 255, 402 240 Z"/>
+      </g>
     </g>
+
+    <!-- B. BOLD 3D "ARY" TYPOGRAPHY -->
+    <g id="ary-3d-text" transform="translate(0, 10)">
+      
+      <!-- 1. DEEP RED 3D EXTRUSION & SHADOW BASE -->
+      <!-- 'A' 3D Base -->
+      <path d="M 195 290 C 235 280, 260 300, 245 365 L 210 470 C 205 485, 170 485, 160 465 L 148 405 L 90 410 L 68 465 C 55 485, 25 480, 18 460 L 88 305 C 98 285, 140 285, 195 290 Z"
+            fill="#7A0000" stroke="#7A0000" stroke-width="22" stroke-linejoin="round" stroke-linecap="round"/>
+      <!-- 'R' 3D Base -->
+      <path d="M 270 290 C 335 275, 420 290, 420 365 C 420 415, 385 438, 345 445 L 425 485 C 438 495, 425 512, 400 512 L 335 512 L 290 452 L 265 452 L 252 498 C 248 510, 222 510, 218 492 L 248 305 Z"
+            fill="#7A0000" stroke="#7A0000" stroke-width="22" stroke-linejoin="round" stroke-linecap="round"/>
+      <!-- 'Y' 3D Base -->
+      <path d="M 430 295 C 450 288, 475 308, 462 330 L 425 405 L 425 475 C 425 495, 395 495, 388 475 L 388 410 L 335 330 C 322 305, 345 288, 365 295 L 408 360 Z"
+            fill="#7A0000" stroke="#7A0000" stroke-width="22" stroke-linejoin="round" stroke-linecap="round"/>
+
+      <!-- 2. VIBRANT RED 3D LAYER -->
+      <!-- 'A' Red Layer -->
+      <path d="M 195 280 C 235 270, 258 290, 245 355 L 210 460 C 205 475, 172 475, 162 455 L 148 395 L 90 400 L 70 455 C 58 475, 28 470, 20 450 L 90 295 C 100 275, 142 275, 195 280 Z"
+            fill="#C40D0D" stroke="#C40D0D" stroke-width="14" stroke-linejoin="round"/>
+      <!-- 'R' Red Layer -->
+      <path d="M 270 280 C 335 265, 415 280, 415 355 C 415 405, 380 428, 342 435 L 420 475 C 432 485, 420 502, 395 502 L 332 502 L 288 442 L 265 442 L 252 488 C 248 500, 225 500, 220 482 L 248 295 Z"
+            fill="#C40D0D" stroke="#C40D0D" stroke-width="14" stroke-linejoin="round"/>
+      <!-- 'Y' Red Layer -->
+      <path d="M 428 285 C 448 278, 472 298, 460 320 L 422 395 L 422 465 C 422 485, 395 485, 388 465 L 388 400 L 335 320 C 322 295, 345 278, 365 285 L 405 350 Z"
+            fill="#C40D0D" stroke="#C40D0D" stroke-width="14" stroke-linejoin="round"/>
+
+      <!-- 3. PURE WHITE TOP BUBBLE LETTERS -->
+      <!-- 'A' White Face -->
+      <path d="M 190 270 C 228 262, 248 280, 238 340 L 206 440 C 202 452, 178 452, 170 438 L 152 380 L 92 385 L 75 438 C 65 455, 38 450, 32 435 L 94 285 C 104 265, 142 265, 190 270 Z"
+            fill="#FFFFFF"/>
+      <!-- 'A' Inner Hole -->
+      <path d="M 125 350 L 160 346 C 168 345, 172 328, 164 305 C 155 288, 142 288, 134 300 Z" fill="#C40D0D"/>
+
+      <!-- 'R' White Face -->
+      <path d="M 265 270 C 325 258, 400 270, 400 342 C 400 388, 368 410, 332 416 L 405 456 C 416 465, 406 480, 385 480 L 328 480 L 285 425 L 260 425 L 248 468 C 244 478, 228 478, 224 462 L 248 285 Z"
+            fill="#FFFFFF"/>
+      <!-- 'R' Inner Hole -->
+      <path d="M 285 315 C 322 310, 362 315, 362 342 C 362 368, 325 375, 288 375 Z" fill="#C40D0D"/>
+
+      <!-- 'Y' White Face -->
+      <path d="M 422 275 C 440 268, 460 288, 450 308 L 415 380 L 415 450 C 415 468, 392 468, 388 450 L 388 385 L 338 308 C 326 285, 348 268, 366 275 L 402 338 Z"
+            fill="#FFFFFF"/>
+    </g>
+
+    <!-- C. BRIGHT YELLOW CURVED SWOOSH UNDERLINE -->
+    <path d="M 115 485 C 210 455, 330 455, 435 485 C 330 472, 210 472, 115 485 Z"
+          fill="#FFB300" stroke="#7A0000" stroke-width="4" stroke-linejoin="round"/>
 
   </g>
 </svg>

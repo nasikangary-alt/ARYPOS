@@ -82,7 +82,7 @@ export const LoginView: React.FC = () => {
   }, [handleDial, handleBackspace, handleClear, handleSubmit]);
 
   return (
-    <div className="h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-white text-[#172033] flex flex-col items-center justify-center px-5 py-4 select-none">
+    <div className="h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-white text-[#172033] flex flex-col items-center justify-center px-5 py-4 select-none app-login-container">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-[360px] h-full max-h-[680px] flex flex-col justify-between py-1"

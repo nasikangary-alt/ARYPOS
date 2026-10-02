@@ -54,3 +54,52 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ========================================================
+   GLOBAL ANDROID CAPACITOR SAFE-AREA SYSTEM
+   ======================================================== */
+
+:root {
+  /* On Web / PWA, top safe-area remains strictly 0 to avoid extra spacing */
+  --safe-area-top: 0px;
+}
+
+/* Activated strictly inside Android Capacitor APK */
+html.capacitor-android {
+  --safe-area-top: 24px;
+  --safe-area-top: max(env(safe-area-inset-top, 0px), 24px);
+}
+
+/* 1. Global Safe Area for Mobile Top Sticky Headers (MobileHeader & Kasir POS header) */
+html.capacitor-android .app-mobile-shell header.sticky.top-0,
+html.capacitor-android header.sticky.top-0 {
+  padding-top: calc(var(--safe-area-top) + 0.625rem) !important;
+}
+
+/* 2. Subview Sticky Header in App.tsx (sticks directly below the safe-padded MobileHeader) */
+html.capacitor-android .subview-sticky-header,
+html.capacitor-android .sticky.top-\[52px\] {
+  top: calc(52px + var(--safe-area-top)) !important;
+}
+
+/* 3. Fullscreen modal sheets & checkout views (CartBottomSheet, PaymentScreen) */
+html.capacitor-android .app-fullscreen-screen > header:first-child,
+html.capacitor-android .app-fullscreen-screen > div > header:first-child {
+  padding-top: calc(var(--safe-area-top) + 0.75rem) !important;
+}
+
+/* 4. Fullscreen modal views without header (PaymentSuccessScreen) */
+html.capacitor-android .app-payment-success-screen {
+  padding-top: calc(var(--safe-area-top) + 1.25rem) !important;
+}
+
+/* 5. Centered dialogs & modal backdrop overlays (OpeningCashModal, CloseCashierModal, ReceiptModal, etc.) */
+html.capacitor-android .fixed.inset-0[class*="bg-black"],
+html.capacitor-android .fixed.inset-0[class*="bg-slate"] {
+  padding-top: max(1rem, var(--safe-area-top)) !important;
+}
+
+/* 6. Login View & Auth screen container */
+html.capacitor-android .app-login-container {
+  padding-top: calc(var(--safe-area-top) + 1rem) !important;
+}

@@ -81,7 +81,7 @@ export const PaymentSuccessScreen: React.FC<PaymentSuccessScreenProps> = ({
     <div
       className={`fixed inset-0 ${
         isDesktopWide ? 'lg:left-64 z-40' : 'z-50'
-      } bg-[#F7F8FA] text-[#172033] flex flex-col justify-between py-4 overflow-y-auto`}
+      } bg-[#F7F8FA] text-[#172033] flex flex-col justify-between py-4 overflow-y-auto app-payment-success-screen`}
     >
       <div
         className={`flex-1 flex flex-col items-center justify-center py-6 text-center ${containerWidthClass}`}

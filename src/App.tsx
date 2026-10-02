@@ -253,7 +253,7 @@ const MainLayout: React.FC = () => {
       </div>
 
       {/* Smartphone Frame Container */}
-      <div className="w-full max-w-[430px] min-h-screen bg-[#F7F8FA] shadow-2xl relative flex flex-col border-x border-[#E8ECF2]">
+      <div className="w-full max-w-[430px] min-h-screen bg-[#F7F8FA] shadow-2xl relative flex flex-col border-x border-[#E8ECF2] app-mobile-shell">
         {/* Mobile Header Bar */}
         <MobileHeader
           activeTab={activeTab}
@@ -264,7 +264,7 @@ const MainLayout: React.FC = () => {
 
         {/* Subview Back Header */}
         {isSubView && (
-          <div className="sticky top-[52px] z-20 bg-white/95 backdrop-blur-md border-b border-[#E8ECF2] px-4 py-2.5 flex items-center gap-3">
+          <div className="sticky top-[52px] z-20 bg-white/95 backdrop-blur-md border-b border-[#E8ECF2] px-4 py-2.5 flex items-center gap-3 subview-sticky-header">
             <button
               type="button"
               onClick={() => setActiveTab('lainnya')}

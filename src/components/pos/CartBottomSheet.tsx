@@ -89,7 +89,7 @@ export const CartBottomSheet: React.FC<CartBottomSheetProps> = ({
     <div
       className={`fixed inset-0 ${
         isDesktopWide ? 'lg:left-64 z-40' : 'z-50'
-      } bg-[#F7F8FA] text-[#172033] flex flex-col justify-between overflow-hidden animate-in fade-in duration-150`}
+      } bg-[#F7F8FA] text-[#172033] flex flex-col justify-between overflow-hidden animate-in fade-in duration-150 app-fullscreen-screen`}
     >
       {/* Top Header: <- Pesanan (Channel) / Review pesanan sebelum pembayaran */}
       <header className="shrink-0 bg-white border-b border-[#E2E6EC] py-3">

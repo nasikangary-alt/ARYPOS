@@ -6,7 +6,12 @@ import {
   StockMovement,
   CashMutation,
   UserProfile,
+  Assembly,
 } from '../types';
+import {
+  getNextTransactionNumber,
+  isOfflineTransactionNo,
+} from './transactionCounter';
 import {
   getOfflinePurchasesQueue,
   saveOfflinePurchaseToQueue,
@@ -294,6 +299,100 @@ export function getSyncState(
 // FIRESTORE ATOMIC & IDEMPOTENT SYNC ENGINE
 // ============================================================================
 
+export interface SaleSyncResult {
+  syncedSales: Sale[];
+  failedSales: { sale: Sale; error: string }[];
+}
+
+/**
+ * Sinkronisasi penjualan offline ke Firestore:
+ * 1. Mengganti nomor transaksi prefix perangkat (OFF-<deviceId>-<seq>) dengan nomor atomik Firestore (counters/sales_YYYYMMDD)
+ * 2. Menyimpan nomor offline asli di offlineTransactionNo untuk jejak audit
+ * 3. Hanya memotong stok jika stockDeducted !== true
+ * 4. Menandai stockDeducted: true di dalam batch yang sama dengan pemotongan stok
+ */
+export async function syncOfflineSalesToFirestore(
+  firestoreInstance: Firestore,
+  userProfile: UserProfile | null,
+  productsMap: Map<string, Product>,
+  ingredientsMap?: Map<string, Ingredient>,
+  assembliesMap?: Map<string, Assembly>,
+  onProgress?: (syncedId: string, current: number, total: number) => void
+): Promise<SaleSyncResult> {
+  const offlineSales = await getOfflineSalesAsync();
+  const syncedSales: Sale[] = [];
+  const failedSales: { sale: Sale; error: string }[] = [];
+
+  if (!offlineSales || offlineSales.length === 0) {
+    return { syncedSales, failedSales };
+  }
+
+  const total = offlineSales.length;
+  let count = 0;
+
+  for (const offlineSale of offlineSales) {
+    count += 1;
+    try {
+      let officialTxNo = offlineSale.transactionNo;
+      let originalOfflineNo = offlineSale.offlineTransactionNo;
+
+      // 1. Nomor transaksi dari counter atomik di Firestore jika berprefix offline
+      if (isOfflineTransactionNo(offlineSale.transactionNo)) {
+        const counterResult = await getNextTransactionNumber(
+          firestoreInstance,
+          offlineSale.date || offlineSale.createdAt
+        );
+        officialTxNo = counterResult.transactionNo;
+        originalOfflineNo = offlineSale.transactionNo;
+      }
+
+      const now = new Date().toISOString();
+      const saleRef = doc(firestoreInstance, 'sales', offlineSale.id);
+      const existingSnap = await getDoc(saleRef);
+      const isAlreadyDeducted =
+        existingSnap.exists() && existingSnap.data()?.stockDeducted === true;
+
+      const syncedSale: Sale = {
+        ...offlineSale,
+        transactionNo: officialTxNo,
+        offlineTransactionNo: originalOfflineNo || offlineSale.offlineTransactionNo,
+        isOfflineSync: false,
+        syncedAt: now,
+        stockDeducted: isAlreadyDeducted || offlineSale.stockDeducted === true,
+      };
+
+      // 2. Simpan atau perbarui dokumen penjualan di Firestore
+      await setDoc(saleRef, sanitizeFirestore(syncedSale), { merge: true });
+
+      // 3. Potong stok HANYA jika false (atau belum pernah dipotong sebelumnya)
+      if (!isAlreadyDeducted && offlineSale.stockDeducted !== true) {
+        await processSaleStockDeduction(
+          syncedSale,
+          productsMap,
+          userProfile?.uid || 'offline_sync',
+          ingredientsMap,
+          assembliesMap
+        );
+        syncedSale.stockDeducted = true;
+      }
+
+      // 4. Hapus dari queue offline setelah berhasil disinkronkan
+      await removeOfflineSaleAsync(offlineSale.id);
+      syncedSales.push(syncedSale);
+
+      if (onProgress) {
+        onProgress(offlineSale.id, count, total);
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown sync error';
+      console.error(`Failed to sync sale ${offlineSale.id}:`, err);
+      failedSales.push({ sale: offlineSale, error: errorMsg });
+    }
+  }
+
+  return { syncedSales, failedSales };
+}
+
 export interface PurchaseSyncResult {
   syncedPurchases: Purchase[];
   failedPurchases: { purchase: Purchase; error: string }[];
@@ -422,6 +521,15 @@ export async function syncOfflinePurchasesToFirestore(
             // Update accumulator maps
             runningProductStock.set(item.targetId, newStock);
 
+            // Tahap 7: Hitung costPerUnit dengan rata-rata tertimbang (stokLama*costLama + qtyBaru*costBaru) / (stokLama + qtyBaru)
+            const oldStock = Math.max(0, currentStock);
+            const oldCost = Number(baseProduct?.costPerUnit ?? item.costPerUnit ?? 0);
+            const newUnitCost = costPerStockUnit > 0 ? costPerStockUnit : oldCost;
+            const weightedCost =
+              oldStock > 0 && oldCost > 0 && oldStock + stockAdded > 0
+                ? Math.round(((oldStock * oldCost + stockAdded * newUnitCost) / (oldStock + stockAdded)) * 100) / 100
+                : newUnitCost;
+
             const updatedProd: Product = {
               ...(baseProduct || ({ id: item.targetId, name: item.targetName || 'Produk' } as Product)),
               id: item.targetId,
@@ -430,7 +538,7 @@ export async function syncOfflinePurchasesToFirestore(
               purchaseUnit,
               conversionFactor,
               purchasePrice: item.costPerUnit,
-              costPerUnit: costPerStockUnit > 0 ? costPerStockUnit : (baseProduct?.costPerUnit || item.costPerUnit),
+              costPerUnit: weightedCost,
               updatedAt: now,
             };
             runningProductObj.set(item.targetId, updatedProd);
@@ -507,6 +615,15 @@ export async function syncOfflinePurchasesToFirestore(
             // Update accumulator maps
             runningIngredientStock.set(item.targetId, newStock);
 
+            // Tahap 7: Hitung costPerUnit bahan dengan rata-rata tertimbang
+            const oldStock = Math.max(0, currentStock);
+            const oldCost = Number(baseIng?.costPerUnit ?? item.costPerUnit ?? 0);
+            const newUnitCost = costPerStockUnit > 0 ? costPerStockUnit : oldCost;
+            const weightedCost =
+              oldStock > 0 && oldCost > 0 && oldStock + stockAdded > 0
+                ? Math.round(((oldStock * oldCost + stockAdded * newUnitCost) / (oldStock + stockAdded)) * 100) / 100
+                : newUnitCost;
+
             const updatedIng: Ingredient = {
               ...(baseIng || ({ id: item.targetId, name: item.targetName || 'Bahan' } as Ingredient)),
               id: item.targetId,
@@ -516,7 +633,7 @@ export async function syncOfflinePurchasesToFirestore(
               purchaseUnit,
               conversionFactor,
               purchasePrice: item.costPerUnit,
-              costPerUnit: costPerStockUnit > 0 ? costPerStockUnit : (baseIng?.costPerUnit || item.costPerUnit),
+              costPerUnit: weightedCost,
               updatedAt: now,
             };
             runningIngredientObj.set(item.targetId, updatedIng);

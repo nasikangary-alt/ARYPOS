@@ -14,6 +14,8 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
+  writeBatch,
   onSnapshot,
   collection,
   query,
@@ -21,8 +23,9 @@ import {
   limit,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
-import { Employee, Attendance, UserRole, UserProfile } from '../types';
+import { Employee, Attendance, UserRole, UserProfile, Staff } from '../types';
 import { sanitizeFirestore } from '../utils/sanitizeFirestore';
+import { createHashedPinCredentials, verifyStaffPin } from '../utils/pinSecurity';
 
 export interface ActiveCashierLock {
   isActive: boolean;
@@ -51,12 +54,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// PIN default bootstrap untuk akun Owner awal (disimpan ke Firestore sebagai Hash + Salt, bukan plaintext)
+const DEFAULT_OWNER_INITIAL_PIN = '200413';
+
 // Initial bootstrap owner employee (Owner does not have attendance and can always log in)
 const DEFAULT_OWNER_EMPLOYEE: Employee = {
   id: 'emp_owner_1',
   name: 'Owner ARY',
   username: 'owner',
-  pin: '200413',
+  hasPin: true,
   email: 'nasikangary@gmail.com',
   role: 'OWNER',
   position: 'Owner / Pengelola',
@@ -64,6 +70,15 @@ const DEFAULT_OWNER_EMPLOYEE: Employee = {
   active: true,
   createdAt: '2026-01-01T00:00:00.000Z',
 };
+
+// Bersihkan field sensitif sebelum disimpan ke state / localStorage
+function stripSensitivePinFields(emp: Employee): Employee {
+  const { pin, pinHash, pinSalt, ...safeEmp } = emp;
+  return {
+    ...safeEmp,
+    hasPin: Boolean(emp.hasPin || pinHash || pin),
+  };
+}
 
 function getBrowserDeviceId(): string {
   try {
@@ -426,25 +441,87 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Pastikan sesi Firebase Auth (request.auth != null) aktif sebelum akses Firestore
+  const ensureFirebaseAuthSession = async (): Promise<FirebaseUser | null> => {
+    try {
+      if (auth.currentUser) {
+        return auth.currentUser;
+      }
+      const cred = await signInAnonymously(auth);
+      return cred.user;
+    } catch (err) {
+      console.warn('Could not sign in to Firebase Auth:', err);
+      return auth.currentUser;
+    }
+  };
+
+  // Sinkronkan dokumen /users/{uid} agar firestore.rules getUserRole() mengenali role staf yang login
+  const syncUserRoleDocument = async (employee: Employee): Promise<void> => {
+    try {
+      const fbUser = await ensureFirebaseAuthSession();
+      if (!fbUser) return;
+      const nowIso = new Date().toISOString();
+      const userDoc: UserProfile = {
+        uid: fbUser.uid,
+        employeeId: employee.id,
+        email: employee.email || fbUser.email || '',
+        displayName: employee.name,
+        role: employee.role,
+        active: employee.active !== false,
+        createdAt: employee.createdAt || nowIso,
+        updatedAt: nowIso,
+      };
+      await setDoc(doc(db, 'users', fbUser.uid), sanitizeFirestore(userDoc), { merge: true });
+    } catch (err) {
+      console.warn('Could not sync /users/{uid} role profile:', err);
+    }
+  };
+
+  // Bootstrap akun Owner default secara atomik (tanpa menyimpan PIN plaintext)
+  const bootstrapOwnerAccountAtomically = async () => {
+    const { pinHash, pinSalt } = await createHashedPinCredentials(DEFAULT_OWNER_INITIAL_PIN);
+    const nowIso = new Date().toISOString();
+    const batch = writeBatch(db);
+
+    batch.set(
+      doc(db, 'employees', DEFAULT_OWNER_EMPLOYEE.id),
+      sanitizeFirestore(stripSensitivePinFields(DEFAULT_OWNER_EMPLOYEE)),
+      { merge: true }
+    );
+
+    const ownerStaffDoc: Staff = {
+      id: DEFAULT_OWNER_EMPLOYEE.id,
+      employeeId: DEFAULT_OWNER_EMPLOYEE.id,
+      username: DEFAULT_OWNER_EMPLOYEE.username || 'owner',
+      name: DEFAULT_OWNER_EMPLOYEE.name,
+      pinHash,
+      pinSalt,
+      role: 'OWNER',
+      active: true,
+      createdAt: DEFAULT_OWNER_EMPLOYEE.createdAt,
+      updatedAt: nowIso,
+    };
+    batch.set(doc(db, 'staff', DEFAULT_OWNER_EMPLOYEE.id), sanitizeFirestore(ownerStaffDoc), {
+      merge: true,
+    });
+
+    await batch.commit();
+  };
+
   // Bootstrap seed employees if empty
   const ensureDefaultEmployees = async () => {
     try {
+      await ensureFirebaseAuthSession();
       const snap = await getDocs(collection(db, 'employees'));
       if (snap.empty) {
-        await setDoc(
-          doc(db, 'employees', DEFAULT_OWNER_EMPLOYEE.id),
-          sanitizeFirestore(DEFAULT_OWNER_EMPLOYEE)
-        );
+        await bootstrapOwnerAccountAtomically();
       } else {
         const hasOwner = snap.docs.some((d) => {
           const emp = d.data() as Employee;
           return emp.username?.toLowerCase() === 'owner' || emp.role === 'OWNER';
         });
         if (!hasOwner) {
-          await setDoc(
-            doc(db, 'employees', DEFAULT_OWNER_EMPLOYEE.id),
-            sanitizeFirestore(DEFAULT_OWNER_EMPLOYEE)
-          );
+          await bootstrapOwnerAccountAtomically();
         }
       }
     } catch (err) {
@@ -457,6 +534,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let isSubscribed = true;
 
     const restoreSession = async () => {
+      await ensureFirebaseAuthSession();
       await ensureDefaultEmployees();
 
       const savedSession = localStorage.getItem('ary_employee_session');
@@ -466,9 +544,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (parsed && parsed.id) {
             const empDoc = await getDoc(doc(db, 'employees', parsed.id));
             if (empDoc.exists()) {
-              const liveEmp = normalizeEmployeeRecord({ ...(empDoc.data() as Employee), id: empDoc.id });
+              const liveEmp = stripSensitivePinFields(
+                normalizeEmployeeRecord({ ...(empDoc.data() as Employee), id: empDoc.id })
+              );
               if (liveEmp.active) {
                 try {
+                  await syncUserRoleDocument(liveEmp);
                   await verifySingleCashierLock(liveEmp);
                   if (isSubscribed) {
                     setCurrentEmployee(liveEmp);
@@ -488,6 +569,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
             } else if (parsed.username === 'owner' || parsed.role === 'OWNER') {
               if (isSubscribed) {
+                await syncUserRoleDocument(DEFAULT_OWNER_EMPLOYEE);
                 setCurrentEmployee(DEFAULT_OWNER_EMPLOYEE);
                 setTodayAttendance(null);
                 await cleanupOwnerAttendanceIfAny(DEFAULT_OWNER_EMPLOYEE);
@@ -533,7 +615,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // Login with Username/Email & PIN/Password
+  // Login with Username/Email & PIN/Password (verifikasi Hash + Salt & migrasi otomatis PIN lama)
   const loginWithCredentials = async (
     identifier: string,
     pinOrPass: string
@@ -544,6 +626,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!cleanId || !cleanPin) {
       throw new Error('Username atau PIN salah.');
     }
+
+    // 1. Pastikan sesi Firebase Auth aktif sebelum membaca Firestore
+    await ensureFirebaseAuthSession();
 
     let employee: Employee | null = null;
 
@@ -564,15 +649,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Error fetching employees from firestore:', e);
     }
 
-    // Fallback for default owner account
+    // Fallback untuk akun Owner default jika belum ada di Firestore
     if (!employee && (cleanId === 'owner' || cleanId === 'nasikangary@gmail.com')) {
-      if (cleanPin === '200413') {
+      if (cleanPin === DEFAULT_OWNER_INITIAL_PIN) {
         employee = DEFAULT_OWNER_EMPLOYEE;
         try {
-          await setDoc(
-            doc(db, 'employees', DEFAULT_OWNER_EMPLOYEE.id),
-            sanitizeFirestore(DEFAULT_OWNER_EMPLOYEE)
-          );
+          await bootstrapOwnerAccountAtomically();
         } catch {
           // ignore
         }
@@ -583,7 +665,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Username atau PIN salah.');
     }
 
-    if (employee.pin && employee.pin !== cleanPin) {
+    // 2. Ambil kredensial hash+salt dari koleksi /staff/{employee.id}
+    let staffCred: Partial<Staff> | null = null;
+    try {
+      const staffSnap = await getDoc(doc(db, 'staff', employee.id));
+      if (staffSnap.exists()) {
+        staffCred = staffSnap.data() as Staff;
+      }
+    } catch (err) {
+      console.warn('Could not read staff credential doc:', err);
+    }
+
+    // Jika akun owner default belum memiliki dokumen staff atau pin legacy, izinkan verifikasi terhadap PIN default awal
+    const hasAnyStoredCredential = Boolean(
+      staffCred?.pinHash ||
+        staffCred?.pin ||
+        employee.pinHash ||
+        employee.pin
+    );
+
+    const verification = hasAnyStoredCredential
+      ? await verifyStaffPin(cleanPin, {
+          pinHash: staffCred?.pinHash || employee.pinHash,
+          pinSalt: staffCred?.pinSalt || employee.pinSalt,
+          pin: staffCred?.pin || employee.pin,
+        })
+      : employee.id === DEFAULT_OWNER_EMPLOYEE.id && cleanPin === DEFAULT_OWNER_INITIAL_PIN
+      ? { valid: true, needsMigration: true }
+      : { valid: false, needsMigration: false };
+
+    if (!verification.valid) {
       throw new Error('Username atau PIN salah.');
     }
 
@@ -591,23 +702,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Akun tidak aktif. Hubungi pengelola.');
     }
 
-    // Enforce single active cashier login rule (OWNER is never blocked)
+    // 3. Enforce single active cashier login rule (OWNER is never blocked)
     await verifySingleCashierLock(employee);
 
-    try {
-      if (!auth.currentUser) {
-        await signInAnonymously(auth);
+    // 4. Sinkronkan profil role ke /users/{uid} terlebih dahulu agar aturan RBAC di firestore.rules aktif
+    const safeEmployee = stripSensitivePinFields(employee);
+    await syncUserRoleDocument(safeEmployee);
+
+    // 5. Migrasi otomatis: jika data lama masih menyimpan plaintext `pin` atau belum ada di /staff/{id},
+    // simpan sebagai Hash + Salt di /staff/{id} dan hapus field plaintext `pin` dari /employees/{id} secara atomik
+    if (verification.needsMigration || !staffCred?.pinHash) {
+      try {
+        const { pinHash, pinSalt } = await createHashedPinCredentials(cleanPin);
+        const nowIso = new Date().toISOString();
+        const batch = writeBatch(db);
+
+        batch.set(
+          doc(db, 'staff', employee.id),
+          sanitizeFirestore({
+            id: employee.id,
+            employeeId: employee.id,
+            username: employee.username || employee.id,
+            name: employee.name,
+            pinHash,
+            pinSalt,
+            role: employee.role,
+            active: employee.active,
+            createdAt: employee.createdAt || nowIso,
+            updatedAt: nowIso,
+          }),
+          { merge: true }
+        );
+
+        batch.update(doc(db, 'employees', employee.id), {
+          hasPin: true,
+          pin: deleteField(),
+          pinHash: deleteField(),
+          pinSalt: deleteField(),
+          updatedAt: nowIso,
+        });
+
+        await batch.commit();
+      } catch (migErr) {
+        console.warn('Automatic PIN hash migration skipped:', migErr);
       }
-    } catch {
-      // ignore
     }
 
-    await acquireCashierLockIfNeeded(employee);
-    localStorage.setItem('ary_employee_session', JSON.stringify(employee));
-    setCurrentEmployee(employee);
-    await syncAttendanceCheckIn(employee);
+    await acquireCashierLockIfNeeded(safeEmployee);
+    localStorage.setItem('ary_employee_session', JSON.stringify(safeEmployee));
+    setCurrentEmployee(safeEmployee);
+    await syncAttendanceCheckIn(safeEmployee);
 
-    return employee;
+    return safeEmployee;
   };
 
   // Login with Google (Owner / Linked email)
@@ -633,7 +779,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         uid: user.uid,
         email: user.email,
       };
-      await setDoc(doc(db, 'employees', employee.id), sanitizeFirestore(employee));
+      await setDoc(
+        doc(db, 'employees', employee.id),
+        sanitizeFirestore(stripSensitivePinFields(employee)),
+        { merge: true }
+      );
     }
 
     if (!employee) {
@@ -648,15 +798,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Akun karyawan ini sedang dinonaktifkan.');
     }
 
+    const safeEmployee = stripSensitivePinFields(employee);
+
     // Enforce single active cashier login rule (OWNER is never blocked)
-    await verifySingleCashierLock(employee);
+    await verifySingleCashierLock(safeEmployee);
+    await syncUserRoleDocument(safeEmployee);
 
-    await acquireCashierLockIfNeeded(employee);
-    localStorage.setItem('ary_employee_session', JSON.stringify(employee));
-    setCurrentEmployee(employee);
-    await syncAttendanceCheckIn(employee);
+    await acquireCashierLockIfNeeded(safeEmployee);
+    localStorage.setItem('ary_employee_session', JSON.stringify(safeEmployee));
+    setCurrentEmployee(safeEmployee);
+    await syncAttendanceCheckIn(safeEmployee);
 
-    return employee;
+    return safeEmployee;
   };
 
   // Logout (Release Cashier Lock for Kasir first, Absen Pulang for non-Owner, & Clear Session)

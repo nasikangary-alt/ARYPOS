@@ -575,12 +575,20 @@ export const ProfitLossReport: React.FC<ProfitLossReportProps> = ({
               </tr>
               {renderClickableRow({
                 label: 'Pendapatan Lain',
+                sublabel:
+                  pl.otherIncome > 0
+                    ? `Surplus kas shift (${formatRupiah(pl.shiftSurplusTotal || 0)}) + Opname surplus (${formatRupiah(pl.stockAdjustmentGain || 0)})`
+                    : 'Surplus kas shift & selisih opname stok positif',
                 indent: 1,
                 currentValue: pl.otherIncome,
                 compValue: comp?.otherIncome,
               })}
               {renderClickableRow({
                 label: 'Beban Lain',
+                sublabel:
+                  pl.otherExpense > 0
+                    ? `Defisit kas shift (${formatRupiah(pl.shiftDeficitTotal || 0)}) + Waste (${formatRupiah(pl.wasteTotalValue || 0)}) + Opname minus (${formatRupiah(pl.stockAdjustmentLoss || 0)})`
+                    : 'Defisit kas shift, waste barang, & selisih opname minus',
                 indent: 1,
                 currentValue: pl.otherExpense,
                 compValue: comp?.otherExpense,
@@ -595,6 +603,10 @@ export const ProfitLossReport: React.FC<ProfitLossReportProps> = ({
               })}
               {renderClickableRow({
                 label: 'Pajak',
+                sublabel:
+                  pl.taxExpense > 0
+                    ? `PPh Final: ${formatRupiah(pl.pphFinalExpense || 0)} · PB1: ${formatRupiah(pl.pb1Expense || 0)}`
+                    : 'Pajak dinonaktifkan di Pengaturan',
                 indent: 1,
                 currentValue: pl.taxExpense,
                 compValue: comp?.taxExpense,
@@ -667,16 +679,19 @@ export const ProfitLossReport: React.FC<ProfitLossReportProps> = ({
 
             <tbody className="divide-y divide-slate-100">
               {renderClickableRow({
-                label: 'Kas Masuk dari Penjualan',
-                sublabel:
-                  'Total penjualan bersih (penjualan kotor dikurangi diskon penjualan)',
+                label: 'Kas Masuk Riil dari Penjualan',
+                sublabel: `Penjualan tunai/QRIS/bank (${formatRupiah(
+                  pl.directSalesCashInflow || 0
+                )}) + Settlement platform cair (${formatRupiah(
+                  pl.platformSettlementTotal || 0
+                )})`,
                 indent: 0,
-                currentValue: pl.netSales,
-                compValue: comp?.netSales,
+                currentValue: pl.realSalesCashInflow ?? pl.netSales,
+                compValue: comp ? (comp.realSalesCashInflow ?? comp.netSales) : undefined,
                 onClick: () =>
                   setDrillDown({
                     type: 'SALES',
-                    title: 'Detail Kas Masuk dari Penjualan',
+                    title: 'Detail Kas Masuk Riil dari Penjualan',
                   }),
               })}
               {renderClickableRow({

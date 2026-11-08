@@ -90,8 +90,11 @@ export const OwnerRecentActivity: React.FC<OwnerRecentActivityProps> = ({
       });
     });
 
-    // Expenses
-    expenses.slice(0, 3).forEach((e) => {
+    // Expenses (abaikan expense berstatus VOID)
+    expenses
+      .filter((e) => e.status !== 'VOID')
+      .slice(0, 3)
+      .forEach((e) => {
       list.push({
         id: `exp-${e.id}`,
         category: 'Pengeluaran',

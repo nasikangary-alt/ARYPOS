@@ -13,6 +13,7 @@ import {
   getCashAccountLabel,
   getCashAccountShortLabel,
   getSaleLedgerInflow,
+  hasSaleVoidReversalMutation,
   isDuplicatePurchaseExpense,
   normalizeCashAccount,
 } from '../../utils/cashLedger';
@@ -238,9 +239,12 @@ export const CashAndQrisView: React.FC<CashAndQrisViewProps> = ({
   const unifiedMutations = useMemo<UnifiedMutation[]>(() => {
     const rawList: Omit<UnifiedMutation, 'balanceAfter'>[] = [];
 
-    // 1. Sales
+    // 1. Sales (termasuk penjualan VOID yang memiliki mutasi balik OUT agar jejak IN & OUT berimbang di buku besar)
     sales.forEach((sale) => {
-      if (sale.status === 'COMPLETED') {
+      const isCompleted = sale.status === 'COMPLETED';
+      const hasVoidReversal =
+        sale.status === 'VOID' && hasSaleVoidReversalMutation(sale, cashMutations);
+      if (isCompleted || hasVoidReversal) {
         const { account: rawAcc, amount: inflowAmount } = getSaleLedgerInflow(sale);
         if (!rawAcc || inflowAmount <= 0) return;
 
@@ -264,7 +268,9 @@ export const CashAndQrisView: React.FC<CashAndQrisViewProps> = ({
           rawAccount: rawAcc,
           type: 'PENJUALAN',
           typeLabel: `Penjualan ${channelLabel}`,
-          title: `Penjualan #${sale.transactionNo || sale.id.slice(-6)}`,
+          title: `Penjualan #${sale.transactionNo || sale.id.slice(-6)}${
+            sale.status === 'VOID' ? ' (VOID)' : ''
+          }`,
           notes: `${sale.items.length} item`,
           amount: inflowAmount,
           flow: 'IN',
@@ -275,8 +281,9 @@ export const CashAndQrisView: React.FC<CashAndQrisViewProps> = ({
       }
     });
 
-    // 2. Expenses (deduplicated against purchase cashMutations)
+    // 2. Expenses (abaikan expense berstatus VOID & deduplicated against purchase cashMutations)
     expenses.forEach((exp) => {
+      if (exp.status === 'VOID') return;
       if (isDuplicatePurchaseExpense(exp, cashMutations)) return;
       const rawAcc = normalizeCashAccount(exp.paymentSource || 'KAS_KASIR', exp.note);
 

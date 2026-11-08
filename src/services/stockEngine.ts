@@ -14,7 +14,10 @@ import {
   OverheadItem,
   Assembly,
   AssemblyItem,
+  CashMutation,
+  AuditLog,
 } from '../types';
+import { getSaleLedgerInflow, getCashAccountLabel } from '../utils/cashLedger';
 
 /**
  * Determines whether a product is a kitchen production output ("Produk Hasil Produksi", e.g., Ayam Crispy, Sambal, Nasi, Teh Manis Mentah).
@@ -597,6 +600,11 @@ export async function processSaleStockDeduction(
   ingredientsMap?: Map<string, Ingredient>,
   assembliesMap?: Map<string, Assembly>
 ): Promise<void> {
+  // Sinkron offline / POS hanya memotong stok jika false (belum pernah dipotong)
+  if (sale.stockDeducted === true) {
+    return;
+  }
+
   const batch = writeBatch(db);
   const now = new Date().toISOString();
 
@@ -784,6 +792,17 @@ export async function processSaleStockDeduction(
     deductProductOrComposition(product, item.quantity);
   }
 
+  // Set stockDeducted = true di dalam batch yang sama dengan pemotongan stok
+  const saleRef = doc(db, 'sales', sale.id);
+  batch.set(
+    saleRef,
+    sanitizeFirestore({
+      stockDeducted: true,
+      updatedAt: now,
+    }),
+    { merge: true }
+  );
+
   try {
     await batch.commit();
   } catch (error) {
@@ -800,7 +819,8 @@ export async function processVoidStockReversal(
   userUid: string,
   reason: string,
   ingredientsMap?: Map<string, Ingredient>,
-  assembliesMap?: Map<string, Assembly>
+  assembliesMap?: Map<string, Assembly>,
+  userName?: string
 ): Promise<void> {
   const batch = writeBatch(db);
   const now = new Date().toISOString();
@@ -981,23 +1001,66 @@ export async function processVoidStockReversal(
     batch.set(movementRef, sanitizeFirestore(movement));
   };
 
-  for (const item of sale.items) {
-    const product = productsMap.get(item.productId);
-    if (!product) continue;
-    restoreProductOrComposition(product, item.quantity);
+  // Kembalikan stok hanya jika transaksi penjualan memang sudah pernah memotong stok
+  if (sale.stockDeducted !== false) {
+    for (const item of sale.items) {
+      const product = productsMap.get(item.productId);
+      if (!product) continue;
+      restoreProductOrComposition(product, item.quantity);
+    }
   }
 
-  // Update sale status to VOID
+  // Update sale status to VOID beserta metadata void & tandai stockDeducted: false
   const saleRef = doc(db, 'sales', sale.id);
+  const actorName = userName || sale.cashierName || 'Admin';
   batch.set(
     saleRef,
     sanitizeFirestore({
       status: 'VOID',
+      stockDeducted: false,
       voidReason: reason,
+      voidedAt: now,
+      voidedBy: userUid,
+      voidedByName: actorName,
       updatedAt: now,
     }),
     { merge: true }
   );
+
+  // Void penjualan yang sudah masuk akun non-laci (QRIS/bank/wallet) wajib membuat mutasi pengembalian dana (OUT)
+  if (sale.status === 'COMPLETED') {
+    const { account: targetAcc, amount: inflowAmount } = getSaleLedgerInflow(sale);
+    if (targetAcc && targetAcc !== 'KAS_KASIR' && inflowAmount > 0) {
+      const mutRef = doc(collection(db, 'cash_mutations'));
+      const reversalMutation: CashMutation = {
+        id: mutRef.id,
+        date: now.split('T')[0],
+        account: targetAcc,
+        type: 'PENYESUAIAN',
+        amount: inflowAmount,
+        flow: 'OUT',
+        title: `Void Penjualan #${sale.transactionNo || sale.id.slice(-6)}`,
+        notes: `Pengembalian dana void penjualan (${getCashAccountLabel(targetAcc)}): ${reason}`,
+        referenceId: sale.id,
+        createdBy: userUid,
+        createdByName: actorName,
+        createdAt: now,
+      };
+      batch.set(mutRef, sanitizeFirestore(reversalMutation));
+    }
+  }
+
+  // Catat audit log void penjualan secara atomik dalam batch yang sama
+  const auditRef = doc(collection(db, 'audit_logs'));
+  const auditEntry: AuditLog = {
+    id: auditRef.id,
+    action: 'SALE_VOIDED',
+    details: `Void penjualan #${sale.transactionNo || sale.id.slice(-6)} (Rp ${sale.finalAmount.toLocaleString('id-ID')}). Alasan: ${reason}`,
+    userUid,
+    userName: actorName,
+    createdAt: now,
+  };
+  batch.set(auditRef, sanitizeFirestore(auditEntry));
 
   try {
     await batch.commit();

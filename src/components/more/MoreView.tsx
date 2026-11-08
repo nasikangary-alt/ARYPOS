@@ -65,13 +65,26 @@ export const MoreView: React.FC<MoreViewProps> = ({ onNavigateTab }) => {
     cashBalanceSummary,
     posLayoutMode,
     setPosLayoutMode,
+    taxSettings,
+    updateTaxSettings,
   } = useApp();
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showTaxModal, setShowTaxModal] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+
+  // Form State Pengaturan Pajak (Tahap 7)
+  const [taxForm, setTaxForm] = useState({
+    enablePphFinal: taxSettings?.enablePphFinal ?? false,
+    pphFinalRate: taxSettings?.pphFinalRate ?? 0.5,
+    enablePb1: taxSettings?.enablePb1 ?? false,
+    pb1Rate: taxSettings?.pb1Rate ?? 10,
+  });
+  const [isSavingTax, setIsSavingTax] = useState(false);
+  const [taxSaveSuccess, setTaxSaveSuccess] = useState(false);
 
   const canManagePromos = currentRole === 'OWNER' || currentRole === 'ADMIN';
 
@@ -185,6 +198,27 @@ export const MoreView: React.FC<MoreViewProps> = ({ onNavigateTab }) => {
           icon: Settings,
           action: () => setShowSettingsModal(true),
         },
+        ...(canManagePromos
+          ? [
+              {
+                id: 'pajak',
+                label: 'Tarif Pajak (PPh & PB1)',
+                subtitle: 'Pengaturan tarif pajak untuk laporan laba rugi',
+                icon: Percent,
+                badge: taxSettings.enablePphFinal || taxSettings.enablePb1 ? 'Aktif' : 'Nonaktif',
+                action: () => {
+                  setTaxForm({
+                    enablePphFinal: taxSettings.enablePphFinal,
+                    pphFinalRate: taxSettings.pphFinalRate,
+                    enablePb1: taxSettings.enablePb1,
+                    pb1Rate: taxSettings.pb1Rate,
+                  });
+                  setTaxSaveSuccess(false);
+                  setShowTaxModal(true);
+                },
+              },
+            ]
+          : []),
         {
           id: 'reset_data',
           label: 'Riset & Hapus Semua Data',
@@ -489,6 +523,38 @@ export const MoreView: React.FC<MoreViewProps> = ({ onNavigateTab }) => {
               </div>
             )}
 
+            {/* Pengaturan Pajak Penjualan (Tahap 7) */}
+            {canManagePromos && (
+              <div className="pt-2.5 border-t border-[#E8ECF2] space-y-1.5">
+                <label className="text-[11px] font-bold text-[#172033] block">
+                  Tarif Pajak (Laba Rugi)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSettingsModal(false);
+                    setTaxForm({
+                      enablePphFinal: taxSettings.enablePphFinal,
+                      pphFinalRate: taxSettings.pphFinalRate,
+                      enablePb1: taxSettings.enablePb1,
+                      pb1Rate: taxSettings.pb1Rate,
+                    });
+                    setTaxSaveSuccess(false);
+                    setShowTaxModal(true);
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl border border-indigo-200 bg-indigo-50/60 text-xs font-bold text-indigo-700 hover:bg-indigo-100/60 transition flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Percent className="w-4 h-4 text-indigo-600" />
+                    <span>Tarif Pajak (PPh Final &amp; PB1)</span>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-white text-indigo-700 font-bold border border-indigo-100">
+                    {taxSettings.enablePphFinal || taxSettings.enablePb1 ? 'Aktif' : 'Nonaktif'}
+                  </span>
+                </button>
+              </div>
+            )}
+
             {/* Riset & Hapus Semua Data */}
             <div className="pt-2 border-t border-[#E8ECF2] space-y-1.5">
               <button
@@ -683,6 +749,185 @@ export const MoreView: React.FC<MoreViewProps> = ({ onNavigateTab }) => {
             >
               Tutup
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tax Settings Modal (Tahap 7) */}
+      {showTaxModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E8ECF2] space-y-4">
+            <div className="flex items-center justify-between border-b border-[#E8ECF2] pb-3">
+              <h3 className="font-bold text-base text-[#172033] flex items-center gap-2">
+                <Percent className="w-5 h-5 text-indigo-600" />
+                <span>Pengaturan Tarif Pajak</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowTaxModal(false)}
+                className="p-1 rounded-full text-[#98A2B3] hover:text-[#172033] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-[#667085] leading-relaxed">
+              Konfigurasi tarif pajak penjualan untuk perhitungan otomatis beban pajak pada Laporan Laba Rugi dan Arus Kas.
+            </p>
+
+            {taxSaveSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs font-bold text-emerald-700 text-center animate-fade-in">
+                ✓ Pengaturan tarif pajak berhasil disimpan ke sistem!
+              </div>
+            )}
+
+            <div className="space-y-3.5">
+              {/* 1. PPh Final UMKM */}
+              <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-xs text-slate-900 block">
+                      PPh Final UMKM (PP 55/2022)
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      Tarif standar 0.5% dari peredaran bruto penjualan
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={taxForm.enablePphFinal}
+                      onChange={(e) =>
+                        setTaxForm((prev) => ({
+                          ...prev,
+                          enablePphFinal: e.target.checked,
+                        }))
+                      }
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+
+                {taxForm.enablePphFinal && (
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
+                    <label className="text-[11px] font-semibold text-slate-600 shrink-0">
+                      Tarif PPh Final (%):
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={taxForm.pphFinalRate}
+                      onChange={(e) =>
+                        setTaxForm((prev) => ({
+                          ...prev,
+                          pphFinalRate: Number(e.target.value) || 0,
+                        }))
+                      }
+                      className="w-24 px-2.5 py-1.5 text-xs font-bold rounded-xl border border-slate-300 bg-white focus:outline-indigo-500 text-right"
+                    />
+                    <span className="text-xs font-bold text-slate-500">%</span>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. PB1 / Pajak Restoran */}
+              <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-xs text-slate-900 block">
+                      PB1 / Pajak Restoran Daerah
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      Pajak Barang &amp; Jasa Tertentu (PBJT) restoran (default 10%)
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={taxForm.enablePb1}
+                      onChange={(e) =>
+                        setTaxForm((prev) => ({
+                          ...prev,
+                          enablePb1: e.target.checked,
+                        }))
+                      }
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+
+                {taxForm.enablePb1 && (
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
+                    <label className="text-[11px] font-semibold text-slate-600 shrink-0">
+                      Tarif PB1 (%):
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max="100"
+                      value={taxForm.pb1Rate}
+                      onChange={(e) =>
+                        setTaxForm((prev) => ({
+                          ...prev,
+                          pb1Rate: Number(e.target.value) || 0,
+                        }))
+                      }
+                      className="w-24 px-2.5 py-1.5 text-xs font-bold rounded-xl border border-slate-300 bg-white focus:outline-indigo-500 text-right"
+                    />
+                    <span className="text-xs font-bold text-slate-500">%</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2 border-t border-[#E8ECF2]">
+              <button
+                type="button"
+                onClick={() => setShowTaxModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-xs hover:bg-slate-50 transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isSavingTax}
+                onClick={async () => {
+                  setIsSavingTax(true);
+                  try {
+                    await updateTaxSettings({
+                      enablePphFinal: taxForm.enablePphFinal,
+                      pphFinalRate: Math.max(0, taxForm.pphFinalRate),
+                      enablePb1: taxForm.enablePb1,
+                      pb1Rate: Math.max(0, taxForm.pb1Rate),
+                    });
+                    setTaxSaveSuccess(true);
+                    setTimeout(() => {
+                      setShowTaxModal(false);
+                      setTaxSaveSuccess(false);
+                    }, 800);
+                  } catch (err: any) {
+                    alert(err?.message || 'Gagal menyimpan pengaturan pajak');
+                  } finally {
+                    setIsSavingTax(false);
+                  }
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm active:scale-98"
+              >
+                {isSavingTax ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <span>Simpan Tarif Pajak</span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

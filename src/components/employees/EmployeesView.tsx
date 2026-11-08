@@ -94,7 +94,8 @@ export const EmployeesView: React.FC = () => {
     setEditingEmployee(emp);
     setFormName(emp.name);
     setFormUsername(emp.username || '');
-    setFormPin(emp.pin || '');
+    // Jangan pernah menampilkan PIN lama secara plaintext saat edit (gunakan input kosong untuk ganti PIN)
+    setFormPin('');
     setFormRole(emp.role || 'KARYAWAN');
     setFormPosition(emp.position || 'Kasir');
     setFormWage(emp.dailyWage || 80000);
@@ -438,7 +439,7 @@ export const EmployeesView: React.FC = () => {
                             PIN Login
                           </span>
                           <span className="font-extrabold text-slate-800 tracking-wider">
-                            {emp.pin ? '••••' : 'Belum diset'}
+                            {emp.hasPin || emp.pinHash || emp.pin ? '••••' : 'Belum diset'}
                           </span>
                         </div>
                       </div>
@@ -609,6 +610,27 @@ export const EmployeesView: React.FC = () => {
                       <span className={`font-bold ${checkOutTime ? 'text-blue-700' : 'text-slate-400'}`}>
                         {checkOutTime ? `✓ ${checkOutTime} WIB` : isPresent ? 'Sedang Bertugas' : '-'}
                       </span>
+                    </div>
+                  </div>
+
+                  {/* Wage & Expense Status (Tahap 7) */}
+                  <div className="flex items-center justify-between px-3 py-2 bg-slate-50/70 rounded-2xl border border-slate-100 text-xs">
+                    <span className="text-[11px] font-semibold text-slate-500">Beban Gaji Hari Ini:</span>
+                    <div className="text-right">
+                      <span className="font-bold text-slate-800 block text-[11px]">
+                        {att?.wagePaid && Number(att.wagePaid) > 0
+                          ? formatRupiah(Number(att.wagePaid))
+                          : isPresent
+                          ? formatRupiah(emp.dailyWage || 80000)
+                          : 'Rp 0'}
+                      </span>
+                      {att?.wagePaid && Number(att.wagePaid) > 0 ? (
+                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200">
+                          ✓ Tercatat di Pengeluaran (Gaji)
+                        </span>
+                      ) : (
+                        <span className="text-[9px] text-slate-400">Belum tercatat</span>
+                      )}
                     </div>
                   </div>
 
@@ -884,15 +906,17 @@ export const EmployeesView: React.FC = () => {
 
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">
-                    PIN Keamanan (4-6 digit) <span className="text-red-500">*</span>
+                    PIN Keamanan (4-6 digit){' '}
+                    {!editingEmployee && <span className="text-red-500">*</span>}
                   </label>
                   <input
-                    type="text"
-                    required
+                    type="password"
+                    inputMode="numeric"
+                    required={!editingEmployee}
                     maxLength={6}
                     value={formPin}
                     onChange={e => setFormPin(e.target.value.replace(/[^0-9]/g, ''))}
-                    placeholder="1234"
+                    placeholder={editingEmployee ? 'Kosongkan jika tetap' : '1234'}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-bold tracking-widest focus:border-orange-600 outline-none"
                   />
                 </div>

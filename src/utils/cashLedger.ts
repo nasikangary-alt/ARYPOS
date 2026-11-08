@@ -313,17 +313,39 @@ export function isDuplicatePurchaseExpense(
 }
 
 /**
- * Filters out legacy auto-generated PO/purchase expense entries so operational expenses
- * are not double-counted alongside purchase records or cash mutations.
+ * Filters out VOID expenses and legacy auto-generated PO/purchase expense entries so operational
+ * expenses are not double-counted alongside purchase records or cash mutations.
  */
 export function filterStandaloneExpenses(expenses: Expense[]): Expense[] {
   return expenses.filter((exp) => {
+    // Abaikan expense berstatus VOID pada laporan, ekspor, dan ledger
+    if (exp.status === 'VOID') {
+      return false;
+    }
     const note = (exp.note || '').trim();
     if (note.startsWith('Pembelian #PO-') || note.startsWith('Bayar Hutang PO #')) {
       return false;
     }
     return true;
   });
+}
+
+/**
+ * Mengecek apakah penjualan yang di-VOID sudah memiliki mutasi balik (reversal OUT)
+ * pada koleksi cash_mutations (untuk akun non-laci seperti QRIS, bank, dan wallet).
+ */
+export function hasSaleVoidReversalMutation(
+  sale: Sale,
+  cashMutations: CashMutation[]
+): boolean {
+  if (sale.status !== 'VOID') return false;
+  return cashMutations.some(
+    (m) =>
+      m.flow === 'OUT' &&
+      m.type === 'PENYESUAIAN' &&
+      (m.referenceId === sale.id ||
+        (Boolean(sale.transactionNo) && m.referenceId === sale.transactionNo))
+  );
 }
 
 export interface ShiftCashMetrics {
@@ -413,6 +435,7 @@ export function calculateShiftCashMetrics(params: {
   if (activeShift) {
     const relevantExpenses = expenses.filter(
       (e) =>
+        e.status !== 'VOID' &&
         e.createdAt >= activeShift.openedAt &&
         e.createdAt <= nowIso &&
         !isDuplicatePurchaseExpense(e, cashMutations)
@@ -561,14 +584,19 @@ export function calculateCompanyCashSummary(params: {
     kasKasirAnchorShiftId = lastClosedShift.id;
   }
 
-  // 1. Sales inflows
+  // 1. Sales inflows (penjualan VOID dengan mutasi balik OUT tetap dihitung inflow awalnya agar net 0 dengan mutasi baliknya)
   sales.forEach((sale) => {
-    if (sale.status !== 'COMPLETED') return;
+    const isCompleted = sale.status === 'COMPLETED';
+    const hasVoidReversal =
+      sale.status === 'VOID' && hasSaleVoidReversalMutation(sale, cashMutations);
+    if (!isCompleted && !hasVoidReversal) return;
+
     const { account: targetAcc, amount } = getSaleLedgerInflow(sale);
     if (!targetAcc || amount <= 0) return;
 
     const isToday =
-      (sale.createdAt && sale.createdAt.startsWith(todayStr)) || sale.date === todayStr;
+      isCompleted &&
+      ((sale.createdAt && sale.createdAt.startsWith(todayStr)) || sale.date === todayStr);
 
     if (targetAcc === 'KAS_KASIR') {
       if (!kasKasirAnchorTime || sale.createdAt >= kasKasirAnchorTime) {
@@ -601,8 +629,9 @@ export function calculateCompanyCashSummary(params: {
     }
   });
 
-  // 2. Expenses outflows (excluding legacy duplicate purchase expenses)
+  // 2. Expenses outflows (excluding VOID and legacy duplicate purchase expenses)
   expenses.forEach((exp) => {
+    if (exp.status === 'VOID') return;
     if (isDuplicatePurchaseExpense(exp, cashMutations)) return;
 
     const amount = exp.amount || 0;
@@ -758,6 +787,39 @@ export function calculateCompanyCashSummary(params: {
     todayPengeluaranKas,
     todayDiambilOwner,
   };
+}
+
+/**
+ * Mengambil saldo terkini dari suatu akun kas/bank/wallet berdasarkan CashBalanceSummary
+ */
+export function getAccountBalanceFromSummary(
+  summary: CashBalanceSummary | undefined,
+  account: string | undefined
+): number {
+  if (!summary || !account) return 0;
+  const norm = normalizeCashAccount(account);
+  switch (norm) {
+    case 'KAS_KASIR':
+      return summary.kasKasir ?? 0;
+    case 'KAS_QRIS':
+      return summary.kasQris ?? 0;
+    case 'KAS_OWNER':
+      return summary.kasOwner ?? 0;
+    case 'BANK_BCA':
+      return summary.bankBca ?? 0;
+    case 'BANK_JAGO':
+      return summary.bankJago ?? 0;
+    case 'BANK_MANDIRI':
+      return summary.bankMandiri ?? 0;
+    case 'WALLET_GOFOOD':
+      return summary.walletGofood ?? 0;
+    case 'WALLET_GRABFOOD':
+      return summary.walletGrabfood ?? 0;
+    case 'WALLET_SHOPEEFOOD':
+      return summary.walletShopeefood ?? 0;
+    default:
+      return 0;
+  }
 }
 
 function mTitleHasOwner(title?: string): boolean {

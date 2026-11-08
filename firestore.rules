@@ -2,109 +2,375 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // =========================================================================
+    // HELPER FUNCTIONS: Autentikasi & Role-Based Access Control (RBAC)
+    // =========================================================================
+
+    // Memastikan request berasal dari sesi Firebase Auth yang sudah login
     function isSignedIn() {
       return request.auth != null;
     }
 
+    // Pemilik utama berdasarkan email terverifikasi di token Firebase Auth
     function isOwnerEmail() {
       return isSignedIn() && request.auth.token.email == 'nasikangary@gmail.com';
     }
 
-    // Users collection
+    // Resolusi role pengguna dari Custom Claims, koleksi /users/{uid}, atau /employees/{uid}
+    function getUserRole() {
+      return isOwnerEmail()
+        ? 'OWNER'
+        : ('role' in request.auth.token && request.auth.token.role != null)
+          ? request.auth.token.role
+          : exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+            : exists(/databases/$(database)/documents/employees/$(request.auth.uid))
+              ? get(/databases/$(database)/documents/employees/$(request.auth.uid)).data.role
+              : null;
+    }
+
+    function isOwner() {
+      return isSignedIn() && getUserRole() == 'OWNER';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && getUserRole() == 'ADMIN';
+    }
+
+    function isKasir() {
+      return isSignedIn() && getUserRole() == 'KASIR';
+    }
+
+    function isKaryawan() {
+      return isSignedIn() && getUserRole() == 'KARYAWAN';
+    }
+
+    function isAdminOrOwner() {
+      return isOwner() || isAdmin();
+    }
+
+    function isAuthorizedStaff() {
+      return isOwner() || isAdmin() || isKasir() || isKaryawan();
+    }
+
+    // Memastikan dokumen tidak menyimpan PIN dalam bentuk plaintext
+    function hasNoPlaintextPin(data) {
+      return !('pin' in data) || data.pin == null || data.pin == '';
+    }
+
+    // Memastikan kredensial PIN disimpan sebagai SHA-256 hash (64 hex chars) + salt (>= 16 chars)
+    function hasValidPinHash(data) {
+      return hasNoPlaintextPin(data)
+        && ('pinHash' in data && data.pinHash is string && data.pinHash.size() == 64)
+        && ('pinSalt' in data && data.pinSalt is string && data.pinSalt.size() >= 16);
+    }
+
+    // =========================================================================
+    // 1. USERS & STAFF CREDENTIALS (Proteksi Role & PIN Hash + Salt)
+    // =========================================================================
+
+    // Profil sesi pengguna Firebase Auth (/users/{userId})
+    // Mencegah self-elevation ke ADMIN/OWNER tanpa otorisasi (security_spec.md Payload 10)
     match /users/{userId} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdminOrOwner());
+      allow create, update: if isAdminOrOwner() || (
+        isSignedIn()
+        && request.auth.uid == userId
+        && (
+          request.resource.data.role in ['KASIR', 'KARYAWAN']
+          || isOwnerEmail()
+          || (
+            'employeeId' in request.resource.data
+            && exists(/databases/$(database)/documents/employees/$(request.resource.data.employeeId))
+            && get(/databases/$(database)/documents/employees/$(request.resource.data.employeeId)).data.role == request.resource.data.role
+            && get(/databases/$(database)/documents/employees/$(request.resource.data.employeeId)).data.active != false
+          )
+        )
+      );
+      allow delete: if false;
     }
 
-    // Categories
-    match /categories/{categoryId} {
-      allow read, write: if true;
-    }
-
-    // Ingredient Categories
-    match /ingredient_categories/{categoryId} {
-      allow read, write: if true;
-    }
-
-    // Ingredients
-    match /ingredients/{ingredientId} {
-      allow read, write: if true;
-    }
-
-    // Products
-    match /products/{productId} {
-      allow read, write: if true;
-    }
-
-    // Recipes
-    match /recipes/{recipeId} {
-      allow read, write: if true;
-    }
-
-    // Stock Movements
-    match /stock_movements/{movementId} {
-      allow read, write: if true;
-    }
-
-    // Stock Productions
-    match /stock_productions/{productionId} {
-      allow read, write: if true;
-    }
-
-    // Purchases
-    match /purchases/{purchaseId} {
-      allow read, write: if true;
-    }
-
-    // Sales
-    match /sales/{saleId} {
-      allow read, write: if true;
-    }
-
-    // Expenses
-    match /expenses/{expenseId} {
-      allow read, write: if true;
-    }
-
-    // Cash & QRIS Mutations
-    match /cash_mutations/{mutationId} {
-      allow read, write: if true;
-    }
-
-    // Employees
-    match /employees/{employeeId} {
-      allow read, write: if true;
-    }
-
-    // Attendance
-    match /attendance/{attendanceId} {
-      allow read, write: if true;
-    }
-
-    // Audit Logs
-    match /audit_logs/{logId} {
-      allow read, write: if true;
-    }
-
-    // Staff Accounts
+    // Koleksi kredensial PIN staf (/staff/{staffId})
+    // PIN wajib tersimpan dalam bentuk hash + salt dan TIDAK BISA dibaca oleh role KASIR
     match /staff/{staffId} {
-      allow read, write: if true;
+      // KASIR dilarang membaca koleksi staff; list hanya untuk ADMIN/OWNER,
+      // get satu dokumen diizinkan saat handshake verifikasi login sebelum sesi berstatus KASIR
+      allow get: if isAdminOrOwner() || (isSignedIn() && !isKasir());
+      allow list: if isAdminOrOwner();
+      allow create, update: if (isAdminOrOwner() || (isSignedIn() && !isKasir()))
+        && hasValidPinHash(request.resource.data);
+      allow delete: if false;
     }
 
-    // Shifts
+    // Data profil karyawan (/employees/{employeeId})
+    // Dilarang menyimpan PIN plaintext & upah harian tidak boleh negatif (Payload 8)
+    match /employees/{employeeId} {
+      allow read: if isSignedIn();
+      allow create, update: if (isAdminOrOwner() || (isSignedIn() && employeeId == 'emp_owner_1'))
+        && hasNoPlaintextPin(request.resource.data)
+        && (!('dailyWage' in request.resource.data) || request.resource.data.dailyWage >= 0);
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // 2. KATALOG MENU, BAHAN BAKU & RESEP (Proteksi Harga & BOM)
+    // =========================================================================
+
+    match /categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdminOrOwner();
+    }
+
+    match /ingredient_categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdminOrOwner();
+    }
+
+    // Stok bahan tidak boleh negatif (security_spec.md Invariant 1 & Payload 2)
+    match /ingredients/{ingredientId} {
+      allow read: if isSignedIn();
+      allow create: if (isAdminOrOwner() || isKasir())
+        && request.resource.data.stock is number
+        && request.resource.data.stock >= 0;
+      allow update: if isAuthorizedStaff()
+        && request.resource.data.stock is number
+        && request.resource.data.stock >= 0;
+      allow delete: if isAdminOrOwner();
+    }
+
+    // Produk menu: Ubah harga/resep hanya ADMIN/OWNER (Payload 3).
+    // KASIR/KARYAWAN hanya boleh meng-update angka stok fisik saat transaksi POS / produksi.
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow create: if isAdminOrOwner()
+        && request.resource.data.sellingPrice is number
+        && request.resource.data.sellingPrice >= 0
+        && (!('stock' in request.resource.data) || request.resource.data.stock >= 0);
+      allow update: if (
+        isAdminOrOwner()
+        && request.resource.data.sellingPrice is number
+        && request.resource.data.sellingPrice >= 0
+        && (!('stock' in request.resource.data) || request.resource.data.stock >= 0)
+      ) || (
+        (isKasir() || isKaryawan())
+        && request.resource.data.sellingPrice == resource.data.sellingPrice
+        && request.resource.data.get('originalPrice', null) == resource.data.get('originalPrice', null)
+        && request.resource.data.get('channelPricing', null) == resource.data.get('channelPricing', null)
+        && request.resource.data.get('recipeId', null) == resource.data.get('recipeId', null)
+        && request.resource.data.get('name', '') == resource.data.get('name', '')
+        && (!('stock' in request.resource.data) || request.resource.data.stock >= 0)
+      );
+      allow delete: if isAdminOrOwner();
+    }
+
+    // Resep / BOM hanya boleh diubah oleh ADMIN/OWNER (Payload 5)
+    match /recipes/{recipeId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdminOrOwner();
+    }
+
+    // Komposisi Menu POS / Assembly hanya boleh diubah oleh ADMIN/OWNER
+    match /assemblies/{assemblyId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdminOrOwner();
+    }
+
+    // =========================================================================
+    // 3. LEDGER STOK & PRODUKSI (Append-Only untuk Stock Movements)
+    // =========================================================================
+
+    // Mutasi stok bersifat immutable: hanya boleh create, dilarang update/delete (Payload 7 & 9)
+    match /stock_movements/{movementId} {
+      allow read: if isSignedIn();
+      allow create: if isAuthorizedStaff()
+        && request.resource.data.type in ['PURCHASE', 'PRODUCTION', 'SALE', 'ADJUSTMENT', 'WASTE', 'RETURN']
+        && request.resource.data.changeAmount is number;
+      allow update, delete: if false;
+    }
+
+    match /stock_productions/{productionId} {
+      allow read: if isSignedIn();
+      allow create: if isAuthorizedStaff()
+        && request.resource.data.rawQuantity > 0
+        && request.resource.data.preparedQuantity > 0;
+      allow update: if isAdminOrOwner();
+      allow delete: if false;
+    }
+
+    match /productions/{productionId} {
+      allow read: if isSignedIn();
+      allow create: if isAuthorizedStaff()
+        && request.resource.data.totalProduced > 0;
+      allow update: if isAdminOrOwner();
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // 4. TRANSAKSI KEUANGAN (Sales, Purchases, Expenses, Cash Mutations, Shifts)
+    // =========================================================================
+
+    // Penjualan POS: KASIR hanya boleh create COMPLETED & update saat sinkron/potong stok; VOID hanya ADMIN/OWNER; dilarang delete (Payload 1, 4, 6, 11)
+    match /sales/{saleId} {
+      allow read: if isSignedIn();
+      allow create: if (isKasir() || isAdminOrOwner())
+        && request.resource.data.status == 'COMPLETED'
+        && request.resource.data.transactionNo is string
+        && request.resource.data.transactionNo.size() > 0
+        && request.resource.data.finalAmount is number
+        && request.resource.data.finalAmount >= 0
+        && request.resource.data.cashierId is string
+        && request.resource.data.cashierId.size() > 0;
+      allow update: if (
+        isAdminOrOwner()
+        || (
+          isKasir()
+          && resource.data.status == 'COMPLETED'
+          && request.resource.data.status == 'COMPLETED'
+        )
+      )
+        && request.resource.data.status in ['COMPLETED', 'VOID']
+        && (
+          request.resource.data.status != 'VOID'
+          || (isAdminOrOwner() && request.resource.data.get('voidReason', '') is string && request.resource.data.get('voidReason', '').size() > 0)
+        );
+      allow delete: if false;
+    }
+
+    // Pembelian stok: dilarang delete permanen; void hanya ADMIN/OWNER
+    match /purchases/{purchaseId} {
+      allow read: if isSignedIn();
+      allow create: if (
+        isAdminOrOwner()
+        || (isKasir() && request.resource.data.get('paymentSource', 'KAS_KASIR') == 'KAS_KASIR')
+      )
+        && request.resource.data.totalAmount is number
+        && request.resource.data.totalAmount >= 0;
+      allow update: if (
+        isAdminOrOwner()
+        || (
+          isKasir()
+          && request.resource.data.get('status', 'COMPLETED') != 'VOID'
+        )
+      )
+        && request.resource.data.get('status', 'COMPLETED') in ['COMPLETED', 'VOID'];
+      allow delete: if false;
+    }
+
+    match /vendors/{vendorId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdminOrOwner();
+    }
+
+    // Pengeluaran operasional: dilarang delete permanen; koreksi/void hanya ADMIN/OWNER
+    match /expenses/{expenseId} {
+      allow read: if isSignedIn();
+      allow create: if (isAdminOrOwner() || isKasir())
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0;
+      allow update: if isAdminOrOwner();
+      allow delete: if false;
+    }
+
+    // Mutasi Kas & QRIS: Append-only (koreksi wajib buat mutasi reversal), dilarang delete.
+    // KASIR hanya boleh membuat jenis mutasi operasional laci kasir tertentu.
+    match /cash_mutations/{mutationId} {
+      allow read: if isSignedIn();
+      allow create: if request.resource.data.amount is number
+        && request.resource.data.amount >= 0
+        && request.resource.data.flow in ['IN', 'OUT']
+        && (
+          (
+            isAdminOrOwner()
+            && request.resource.data.type in [
+              'MODAL_AWAL',
+              'PENJUALAN',
+              'TARIK_KAS',
+              'SETOR_OWNER',
+              'PENCAIRAN_QRIS',
+              'PENCAIRAN_PLATFORM',
+              'PENGELUARAN',
+              'PENYESUAIAN',
+              'TRANSFER_DANA'
+            ]
+          )
+          || (
+            isKasir()
+            && request.resource.data.type in [
+              'MODAL_AWAL',
+              'PENJUALAN',
+              'SETOR_OWNER',
+              'PENGELUARAN',
+              'PENYESUAIAN'
+            ]
+          )
+        );
+      allow update, delete: if false;
+    }
+
+    // Shift Kasir: KASIR boleh buka shift (create OPEN) dan tutup shift (update OPEN -> CLOSED)
     match /shifts/{shiftId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow create: if (isKasir() || isAdminOrOwner())
+        && request.resource.data.status == 'OPEN'
+        && request.resource.data.openingCash is number
+        && request.resource.data.openingCash >= 0;
+      allow update: if isAdminOrOwner()
+        || (
+          isKasir()
+          && resource.data.status == 'OPEN'
+          && request.resource.data.status in ['OPEN', 'CLOSED']
+        );
+      allow delete: if false;
     }
 
-    // System Locks (Single Active Cashier Lock)
+    // =========================================================================
+    // 5. ABSENSI, AUDIT LOG & PENGATURAN SISTEM
+    // =========================================================================
+
+    match /attendance/{attendanceId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAuthorizedStaff();
+      allow delete: if isAdminOrOwner();
+    }
+
+    // Audit Logs: hanya boleh create, dilarang update dan delete
+    match /audit_logs/{logId} {
+      allow read: if isAdminOrOwner();
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
     match /system_locks/{lockId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
-    // Default match
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrOwner();
+    }
+
+    match /test/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /system/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // Counter atomik untuk penomoran transaksi POS (counters/sales_YYYYMMDD)
+    match /counters/{counterId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAuthorizedStaff()
+        && request.resource.data.lastSequence is number
+        && request.resource.data.lastSequence > 0;
+      allow delete: if false;
+    }
+
+    // Default fallback: tolak semua akses ke koleksi tak dikenal
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
-

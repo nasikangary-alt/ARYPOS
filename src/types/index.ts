@@ -2,11 +2,13 @@ export type UserRole = 'OWNER' | 'ADMIN' | 'KASIR' | 'KARYAWAN';
 
 export interface UserProfile {
   uid: string;
+  employeeId?: string;
   email: string;
   displayName: string;
   role: UserRole;
   active: boolean;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export type IngredientType = 'RAW' | 'PREPARED' | 'PACKAGING' | 'OTHER' | string;
@@ -336,6 +338,8 @@ export interface Purchase {
   status?: 'COMPLETED' | 'VOID';
   voidReason?: string;
   voidedAt?: string;
+  voidedBy?: string;
+  voidedByName?: string;
 
   notes?: string;
   createdBy: string;
@@ -478,7 +482,12 @@ export interface Sale {
   cashReceived: number;
   changeAmount: number;
   status: SaleStatus;
+  stockDeducted?: boolean; // Menandakan apakah pemotongan stok bahan/produk sudah dicatat secara atomik di Firestore
+  offlineTransactionNo?: string; // Menyimpan nomor transaksi sementara offline (OFF-<deviceId>-<seq>) sebelum dipetakan
   voidReason?: string;
+  voidedAt?: string;
+  voidedBy?: string;
+  voidedByName?: string;
   notes?: string;
   cashierId: string;
   cashierName: string;
@@ -486,6 +495,7 @@ export interface Sale {
   createdAt: string;
   updatedAt?: string;
   isOfflineSync?: boolean;
+  syncedAt?: string;
 }
 
 export type ExpenseCategory =
@@ -519,6 +529,18 @@ export type ExpensePaymentSource =
   | 'BANK_MANDIRI'
   | string;
 
+// Jejak nilai lama setiap kali expense dikoreksi (append-only history)
+export interface ExpenseHistoryEntry {
+  amount: number;
+  category: ExpenseCategory;
+  paymentSource?: ExpensePaymentSource;
+  note?: string;
+  date?: string;
+  changedAt: string;
+  changedBy: string;
+  changedByName?: string;
+}
+
 export interface Expense {
   id: string;
   date: string;
@@ -526,6 +548,13 @@ export interface Expense {
   amount: number;
   paymentSource?: ExpensePaymentSource;
   note?: string;
+  referenceId?: string; // ID referensi transaksi/presensi yang mendasari pengeluaran
+  status?: 'COMPLETED' | 'VOID';
+  voidReason?: string;
+  voidedAt?: string;
+  voidedBy?: string;
+  voidedByName?: string;
+  history?: ExpenseHistoryEntry[];
   createdBy: string;
   createdByName?: string;
   createdAt: string;
@@ -620,7 +649,10 @@ export interface Employee {
   name: string;
   email?: string;
   username?: string;
-  pin?: string;
+  pin?: string; // Legacy plaintext compatibility (dimigrasikan ke staff/{id} pinHash + pinSalt)
+  hasPin?: boolean;
+  pinHash?: string;
+  pinSalt?: string;
   role: UserRole;
   position?: string;
   phone?: string;
@@ -644,6 +676,7 @@ export interface Attendance {
   overtimeHours?: number;
   wagePaid?: boolean | number;
   wageAmount?: number;
+  wageExpenseId?: string; // Referensi ID pengeluaran gaji di collection expenses
   notes?: string;
   createdAt: string;
   updatedAt?: string;
@@ -665,12 +698,16 @@ export interface StockStatusInfo {
 
 export interface Staff {
   id: string;
+  employeeId?: string;
   username: string;
   name: string;
-  pin: string;
+  pin?: string; // Legacy compatibility only (tidak disimpan plaintext lagi)
+  pinHash: string;
+  pinSalt: string;
   role: UserRole;
   active: boolean;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Shift {
@@ -702,3 +739,18 @@ export interface Shift {
   closedBy?: string;
   closedByName?: string;
 }
+
+// Konfigurasi Tarif Pajak (Tahap 7 Audit Keuangan)
+export interface TaxSettings {
+  enablePphFinal: boolean; // PPh Final UMKM PP 55/2022 (tarif 0.5%)
+  pphFinalRate: number;    // % tarif PPh Final (default: 0.5%)
+  enablePb1: boolean;      // PB1 / Pajak Restoran Daerah (tarif default 10%)
+  pb1Rate: number;         // % tarif PB1 (default: 10%)
+}
+
+export const DEFAULT_TAX_SETTINGS: TaxSettings = {
+  enablePphFinal: false,
+  pphFinalRate: 0.5,
+  enablePb1: false,
+  pb1Rate: 10,
+};

@@ -147,6 +147,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ isDesktopWide = true }) 
       if (q) {
         const matchSearch =
           s.transactionNo.toLowerCase().includes(q) ||
+          Boolean(s.offlineTransactionNo && s.offlineTransactionNo.toLowerCase().includes(q)) ||
           s.items.some((i) => i.productName.toLowerCase().includes(q)) ||
           (s.cashierName && s.cashierName.toLowerCase().includes(q)) ||
           fin.orderType.toLowerCase().includes(q) ||

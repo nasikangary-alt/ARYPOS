@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
-import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, writeBatch, query, orderBy, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, deleteField, writeBatch, runTransaction, query, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { createHashedPinCredentials } from '../utils/pinSecurity';
 import { handleFirestoreError, OperationType } from '../firebase/errorHandler';
 import {
   Category,
@@ -17,6 +18,7 @@ import {
   PaymentStatus,
   Vendor,
   Expense,
+  ExpenseHistoryEntry,
   Employee,
   Attendance,
   CartItem,
@@ -42,10 +44,13 @@ import {
   PlatformTransactionSnapshot,
   CompleteTransactionOptions,
   ProductChannelPricing,
+  TaxSettings,
+  DEFAULT_TAX_SETTINGS,
 } from '../types';
 import {
   calculateCompanyCashSummary,
   calculateShiftCashMetrics,
+  getAccountBalanceFromSummary,
   getCashAccountLabel,
   isCashPaymentMethod,
   mapPaymentMethodToAccount,
@@ -84,17 +89,24 @@ import { useAuth } from './AuthContext';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import {
   getOfflineSales,
+  getOfflineSalesAsync,
   saveOfflineSale,
   removeOfflineSale,
   getOfflinePurchases,
   getOfflinePurchasesAsync,
   saveOfflinePurchase,
   removeOfflinePurchase,
+  syncOfflineSalesToFirestore,
   syncOfflinePurchasesToFirestore,
   getPendingOfflineStockAdditions,
   getSyncState,
   SyncState,
 } from '../services/offlineSync';
+import {
+  getNextTransactionNumber,
+  getNextOfflineTransactionNo,
+  isOfflineTransactionNo,
+} from '../services/transactionCounter';
 import {
   getCachedIngredients,
   saveCachedIngredients,
@@ -176,6 +188,10 @@ interface AppContextType {
     productId: string,
     channelPricing: ProductChannelPricing
   ) => Promise<void>;
+
+  // Pengaturan Tarif Pajak (Tahap 7)
+  taxSettings: TaxSettings;
+  updateTaxSettings: (settings: Partial<TaxSettings>) => Promise<void>;
 
   // Actions
   completeTransaction: (
@@ -261,7 +277,7 @@ interface AppContextType {
       notes?: string;
     }
   ) => Promise<Purchase>;
-  deletePurchase: (purchaseId: string) => Promise<void>;
+  deletePurchase: (purchaseId: string, reason?: string) => Promise<void>;
   addPurchasePayment: (
     purchaseId: string,
     paymentData: {
@@ -340,7 +356,7 @@ interface AppContextType {
       date?: string;
     }
   ) => Promise<void>;
-  deleteExpense: (id: string) => Promise<void>;
+  deleteExpense: (id: string, reason?: string) => Promise<void>;
   addCashMutation: (params: {
     account: CashAccount;
     type: CashMutationType;
@@ -459,7 +475,7 @@ function deduplicate<T extends { id?: string }>(items: T[]): T[] {
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentRole, userProfile, currentEmployee } = useAuth();
+  const { currentUser, currentRole, userProfile, currentEmployee } = useAuth();
   const isOnline = useOnlineStatus();
 
   // Firestore Realtime Collections (Default Empty: no dummy data)
@@ -583,6 +599,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // ignore
     }
     return DEFAULT_PLATFORM_FEE_CONFIGS;
+  });
+
+  // Pengaturan Tarif Pajak State (Tahap 7 - Laba Rugi & HPP)
+  const [taxSettings, setTaxSettings] = useState<TaxSettings>(() => {
+    try {
+      const saved = localStorage.getItem('ary_tax_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return { ...DEFAULT_TAX_SETTINGS, ...parsed };
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_TAX_SETTINGS;
   });
 
   // Dark Mode State
@@ -813,8 +843,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // 1. Realtime Subscriptions
+  // 1. Realtime Subscriptions (hanya dijalankan saat sesi Firebase Auth aktif)
   useEffect(() => {
+    if (!currentUser) return;
+
     const unsubCat = onSnapshot(collection(db, 'categories'), snap => {
       if (!snap.empty) {
         const list = snap.docs.map(doc => ({ ...(doc.data() as Category), id: (doc.data() as Category).id || doc.id }));
@@ -1229,15 +1261,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }, err => handleFirestoreError(err, OperationType.GET, 'attendance'));
 
+    const isAdminOrOwnerRole = currentRole === 'OWNER' || currentRole === 'ADMIN';
+
     const qLogs = query(collection(db, 'audit_logs'), orderBy('createdAt', 'desc'));
-    const unsubLogs = onSnapshot(qLogs, snap => {
-      if (!snap.empty) {
-        const list = snap.docs.map(doc => ({ ...(doc.data() as AuditLog), id: (doc.data() as AuditLog).id || doc.id }));
-        setAuditLogs(deduplicate(list));
-      } else {
-        setAuditLogs([]);
-      }
-    }, err => handleFirestoreError(err, OperationType.GET, 'audit_logs'));
+    const unsubLogs = isAdminOrOwnerRole
+      ? onSnapshot(qLogs, snap => {
+          if (!snap.empty) {
+            const list = snap.docs.map(doc => ({ ...(doc.data() as AuditLog), id: (doc.data() as AuditLog).id || doc.id }));
+            setAuditLogs(deduplicate(list));
+          } else {
+            setAuditLogs([]);
+          }
+        }, err => handleFirestoreError(err, OperationType.GET, 'audit_logs'))
+      : () => {
+          setAuditLogs([]);
+        };
 
     const qCash = query(collection(db, 'cash_mutations'), orderBy('createdAt', 'desc'));
     const unsubCash = onSnapshot(qCash, snap => {
@@ -1249,14 +1287,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }, err => handleFirestoreError(err, OperationType.GET, 'cash_mutations'));
 
-    const unsubStaff = onSnapshot(collection(db, 'staff'), snap => {
-      if (!snap.empty) {
-        const list = snap.docs.map(doc => ({ ...(doc.data() as Staff), id: doc.id }));
-        setStaff(deduplicate(list));
-      } else {
-        setStaff([]);
-      }
-    }, err => handleFirestoreError(err, OperationType.GET, 'staff'));
+    // Koleksi staff (berisi pinHash & pinSalt) hanya boleh dibaca oleh ADMIN/OWNER, dilarang untuk KASIR
+    const unsubStaff = isAdminOrOwnerRole
+      ? onSnapshot(collection(db, 'staff'), snap => {
+          if (!snap.empty) {
+            const list = snap.docs.map(doc => ({ ...(doc.data() as Staff), id: doc.id }));
+            setStaff(deduplicate(list));
+          } else {
+            setStaff([]);
+          }
+        }, err => handleFirestoreError(err, OperationType.GET, 'staff'))
+      : () => {
+          setStaff([]);
+        };
 
     const qShifts = query(collection(db, 'shifts'), orderBy('openedAt', 'desc'));
     const unsubShifts = onSnapshot(qShifts, snap => {
@@ -1318,6 +1361,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     );
 
+    const unsubTaxSettings = onSnapshot(
+      doc(db, 'settings', 'tax'),
+      snap => {
+        if (snap.exists()) {
+          const data = snap.data() as TaxSettings;
+          const merged: TaxSettings = {
+            ...DEFAULT_TAX_SETTINGS,
+            ...data,
+          };
+          setTaxSettings(merged);
+          try {
+            localStorage.setItem('ary_tax_settings', JSON.stringify(merged));
+          } catch {
+            // ignore
+          }
+        }
+      },
+      () => {
+        // Optional tax settings doc
+      }
+    );
+
     return () => {
       unsubCat();
       unsubIngCat();
@@ -1339,8 +1404,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubShifts();
       unsubPlatformSettings();
       unsubPlatformConfigs();
+      unsubTaxSettings();
     };
-  }, []);
+  }, [currentUser, currentRole]);
 
 
 
@@ -1353,29 +1419,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setIsSyncingPurchases(true);
     try {
-      // 1. Sync Offline Sales
-      const offlineSalesList = getOfflineSales();
-      if (offlineSalesList.length > 0) {
-        for (const offlineSale of offlineSalesList) {
-          try {
-            await setDoc(doc(db, 'sales', offlineSale.id), {
-              ...offlineSale,
-              isOfflineSync: false,
-            });
-            await processSaleStockDeduction(
-              offlineSale,
-              productsMap,
-              userProfile?.uid || 'offline_sync',
-              ingredientsMap,
-              assembliesMap
-            );
-            removeOfflineSale(offlineSale.id);
-          } catch (e) {
-            console.error('Failed sync for sale', offlineSale.id, e);
-          }
-        }
-        setOfflinePendingSalesCount(getOfflineSales().length);
+      // 1. Sync Offline Sales (dengan pemetaan counter atomik Firestore & idempotensi pemotongan stok)
+      const saleSyncResult = await syncOfflineSalesToFirestore(
+        db,
+        userProfile,
+        productsMap,
+        ingredientsMap,
+        assembliesMap
+      );
+
+      if (saleSyncResult.syncedSales.length > 0) {
+        setSales(prev => {
+          const map = new Map(prev.map(s => [s.id, s]));
+          saleSyncResult.syncedSales.forEach(ss => {
+            map.set(ss.id, ss);
+          });
+          return Array.from(map.values());
+        });
       }
+      const remainingSales = await getOfflineSalesAsync();
+      setOfflinePendingSalesCount(remainingSales.length);
 
       // 2. Sync Offline Purchases
       const offlinePurchasesList = await getOfflinePurchasesAsync();
@@ -1835,6 +1898,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await batch.commit();
   };
 
+  // Update Pengaturan Tarif Pajak (Tahap 7 - PPh Final & PB1)
+  const updateTaxSettings = async (settings: Partial<TaxSettings>): Promise<void> => {
+    if (currentRole !== 'OWNER' && currentRole !== 'ADMIN') {
+      throw new Error('Akses Ditolak: Hanya OWNER atau ADMIN yang dapat mengubah pengaturan pajak.');
+    }
+    const updated: TaxSettings = {
+      ...taxSettings,
+      ...settings,
+    };
+    setTaxSettings(updated);
+    try {
+      localStorage.setItem('ary_tax_settings', JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+    if (isOnline) {
+      try {
+        await setDoc(doc(db, 'settings', 'tax'), sanitizeFirestore(updated), { merge: true });
+        const auditRef = doc(collection(db, 'audit_logs'));
+        await setDoc(
+          auditRef,
+          sanitizeFirestore({
+            id: auditRef.id,
+            action: 'UPDATE_TAX_SETTINGS',
+            details: `Perbarui pengaturan tarif pajak: PPh Final ${
+              updated.enablePphFinal ? `${updated.pphFinalRate}%` : 'Nonaktif'
+            }, PB1 ${updated.enablePb1 ? `${updated.pb1Rate}%` : 'Nonaktif'}`,
+            userUid: currentEmployee?.id || userProfile?.uid || 'user',
+            userName: currentEmployee?.name || userProfile?.displayName || 'User',
+            createdAt: new Date().toISOString(),
+          })
+        );
+      } catch (err) {
+        console.warn('Gagal menyimpan pengaturan pajak ke Firestore:', err);
+      }
+    }
+  };
+
   // Complete POS Transaction
   const completeTransaction = async (
     paymentMethod: PaymentMethod,
@@ -1904,10 +2005,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       customShippingDiscount: manualShippingDiscount,
     });
 
+    const isManualPlatformFee =
+      isMarketplace &&
+      options?.platformServiceFee !== undefined &&
+      options.platformServiceFee !== null;
+
     const effectivePlatformFee = isMarketplace
-      ? options?.platformServiceFee !== undefined && options.platformServiceFee > 0
-        ? Number(options.platformServiceFee)
+      ? isManualPlatformFee
+        ? Math.max(0, Number(options.platformServiceFee))
         : platformBreakdown.totalPlatformFee
+      : 0;
+
+    // Jika kasir mengisi platformServiceFee manual, hitung ulang walletAmount = netOrderAmount - fee efektif,
+    // supaya ledger dan laporan memakai angka yang sama
+    const netOrderAmount = platformBreakdown.netOrderAmount;
+    const effectiveWalletAmount = isMarketplace
+      ? Math.max(0, netOrderAmount - effectivePlatformFee)
       : 0;
 
     const validation = validateAndCalculateCheckout({
@@ -1925,17 +2038,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       throw new Error(validation.error || 'Data transaksi tidak valid.');
     }
 
-    const todaySales = sales.filter(s => {
-      const d = new Date(s.createdAt);
-      const now = new Date();
-      return d.toDateString() === now.toDateString();
-    });
+    // Penomoran transaksi:
+    // - Online: counter atomik di Firestore (runTransaction pada counters/sales_YYYYMMDD)
+    // - Offline: prefix perangkat (OFF-<deviceId>-<seq>) lalu diganti/dipetakan saat sinkron
+    let transactionNo = '';
+    let isOfflineNumber = false;
 
-    const transactionNo = generateTransactionNo(todaySales.length + 1);
+    if (isOnline) {
+      try {
+        const counterResult = await getNextTransactionNumber(db, new Date());
+        transactionNo = counterResult.transactionNo;
+      } catch (counterErr) {
+        console.warn('Gagal mengambil counter transaksi Firestore online, beralih ke prefix perangkat:', counterErr);
+        const offlineResult = getNextOfflineTransactionNo();
+        transactionNo = offlineResult.transactionNo;
+        isOfflineNumber = true;
+      }
+    } else {
+      const offlineResult = getNextOfflineTransactionNo();
+      transactionNo = offlineResult.transactionNo;
+      isOfflineNumber = true;
+    }
+
     const finalAmount = validation.foodTotal;
     const isCash = orderType === 'OFFLINE' && isCashPaymentMethod(paymentMethod);
     const netWalletAmount = isMarketplace
-      ? platformBreakdown.walletAmount
+      ? effectiveWalletAmount
       : validation.foodTotal;
 
     const safeCashReceived = isCash
@@ -1947,20 +2075,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const paymentAccount = mapPaymentMethodToAccount(paymentMethod, orderType);
     const now = new Date().toISOString();
 
-    // Prepare immutable platform fee snapshot
+    // Prepare immutable platform fee snapshot dengan fee efektif & walletAmount yang dihitung ulang
     const platformSnapshot: PlatformTransactionSnapshot | undefined = isMarketplace
       ? {
           platform: orderType,
           platformName: platformSetting?.platformName || orderType,
           grossAmount: platformBreakdown.grossAmount,
           discountAmount: platformBreakdown.discountAmount,
-          netOrderAmount: platformBreakdown.netOrderAmount,
-          platformFeePercentage: platformBreakdown.percentageFee,
-          platformFeeAmount: platformBreakdown.percentageFeeAmount,
-          platformFixedFee: platformBreakdown.fixedFee,
+          netOrderAmount,
+          platformFeePercentage: isManualPlatformFee ? 0 : platformBreakdown.percentageFee,
+          platformFeeAmount: isManualPlatformFee
+            ? effectivePlatformFee
+            : platformBreakdown.percentageFeeAmount,
+          platformFixedFee: isManualPlatformFee ? 0 : platformBreakdown.fixedFee,
           shippingDiscount: platformBreakdown.shippingDiscount,
-          totalPlatformFee: platformBreakdown.totalPlatformFee,
-          walletAmount: platformBreakdown.walletAmount,
+          totalPlatformFee: effectivePlatformFee,
+          walletAmount: effectiveWalletAmount,
         }
       : undefined;
 
@@ -1968,6 +2098,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saleRecord: Sale = {
       id: newSaleRef.id,
       transactionNo,
+      offlineTransactionNo: isOfflineNumber ? transactionNo : undefined,
+      stockDeducted: false, // Diset true secara atomik di dalam batch pemotongan stok
       date: new Date().toISOString().split('T')[0],
       orderType,
       items: saleItems,
@@ -1978,19 +2110,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       shippingFee: validation.shippingFee,
       shippingDiscount: validation.shippingDiscount,
       customerShippingPaid: validation.customerShippingPaid,
-      platformServiceFee: validation.platformServiceFee,
+      platformServiceFee: effectivePlatformFee,
       netSettlementAmount: netWalletAmount,
 
       // Immutable Platform Snapshot
       platformSnapshot,
       grossAmount: platformBreakdown.grossAmount,
       discountAmount: platformBreakdown.discountAmount,
-      netOrderAmount: platformBreakdown.netOrderAmount,
-      platformFeePercentage: isMarketplace ? platformBreakdown.percentageFee : 0,
-      platformFeeAmount: isMarketplace ? platformBreakdown.percentageFeeAmount : 0,
-      platformFixedFee: isMarketplace ? platformBreakdown.fixedFee : 0,
-      totalPlatformFee: isMarketplace ? platformBreakdown.totalPlatformFee : 0,
-      walletAmount: netWalletAmount,
+      netOrderAmount,
+      platformFeePercentage: isMarketplace
+        ? (isManualPlatformFee ? 0 : platformBreakdown.percentageFee)
+        : 0,
+      platformFeeAmount: isMarketplace
+        ? (isManualPlatformFee ? effectivePlatformFee : platformBreakdown.percentageFeeAmount)
+        : 0,
+      platformFixedFee: isMarketplace
+        ? (isManualPlatformFee ? 0 : platformBreakdown.fixedFee)
+        : 0,
+      totalPlatformFee: isMarketplace ? effectivePlatformFee : 0,
+      walletAmount: isMarketplace ? netWalletAmount : undefined,
 
       totalAmount: validation.subtotal,
       discount: validation.itemDiscountTotal + validation.orderDiscount,
@@ -2007,7 +2145,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: now,
     };
 
-    if (isOnline) {
+    if (isOnline && !isOfflineNumber) {
       try {
         await setDoc(newSaleRef, sanitizeFirestore(saleRecord));
         await processSaleStockDeduction(
@@ -2017,12 +2155,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ingredientsMap,
           assembliesMap
         );
+        saleRecord.stockDeducted = true;
       } catch (err) {
         console.error('Online sale save failed, queueing offline', err);
+        saleRecord.isOfflineSync = true;
         saveOfflineSale(saleRecord);
         setOfflinePendingSalesCount(getOfflineSales().length);
       }
     } else {
+      saleRecord.isOfflineSync = true;
       saveOfflineSale(saleRecord);
       setOfflinePendingSalesCount(getOfflineSales().length);
     }
@@ -2043,13 +2184,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       alert('Hanya ADMIN atau OWNER yang berhak membatalkan transaksi.');
       return;
     }
+    if (sale.status === 'VOID') {
+      alert('Transaksi penjualan ini sudah berstatus VOID.');
+      return;
+    }
     await processVoidStockReversal(
       sale,
       productsMap,
-      userProfile?.uid || 'admin',
+      currentEmployee?.id || userProfile?.uid || 'admin',
       reason,
       ingredientsMap,
-      assembliesMap
+      assembliesMap,
+      currentEmployee?.name || userProfile?.displayName || 'Admin'
     );
   };
 
@@ -2383,6 +2529,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const currentStock = typeof product.stock === 'number' ? product.stock : 0;
           const newStock = currentStock + stockAdded;
 
+          // Tahap 7: Hitung costPerUnit produk dengan rata-rata tertimbang
+          const oldStock = Math.max(0, currentStock);
+          const oldCost = Number(product.costPerUnit || 0);
+          const newUnitCost = costPerStockUnit > 0 ? costPerStockUnit : oldCost;
+          const weightedCost =
+            oldStock > 0 && oldCost > 0 && oldStock + stockAdded > 0
+              ? Math.round(((oldStock * oldCost + stockAdded * newUnitCost) / (oldStock + stockAdded)) * 100) / 100
+              : newUnitCost;
+
           const updatedProd: Product = {
             ...product,
             stock: newStock,
@@ -2390,7 +2545,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             purchaseUnit,
             conversionFactor,
             purchasePrice: item.costPerUnit,
-            costPerUnit: costPerStockUnit > 0 ? costPerStockUnit : product.costPerUnit,
+            costPerUnit: weightedCost,
             updatedAt: now,
           };
 
@@ -2446,6 +2601,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const currentStock = typeof ing.stock === 'number' ? ing.stock : 0;
           const newStock = currentStock + stockAdded;
 
+          // Tahap 7: Hitung costPerUnit bahan dengan rata-rata tertimbang (stokLama*costLama + qtyBaru*costBaru) / (stokLama + qtyBaru)
+          const oldStock = Math.max(0, currentStock);
+          const oldCost = Number(ing.costPerUnit || 0);
+          const newUnitCost = costPerStockUnit > 0 ? costPerStockUnit : oldCost;
+          const weightedCost =
+            oldStock > 0 && oldCost > 0 && oldStock + stockAdded > 0
+              ? Math.round(((oldStock * oldCost + stockAdded * newUnitCost) / (oldStock + stockAdded)) * 100) / 100
+              : newUnitCost;
+
           const updatedIng: Ingredient = {
             ...ing,
             stock: newStock,
@@ -2454,7 +2618,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             purchaseUnit,
             conversionFactor,
             purchasePrice: item.costPerUnit,
-            costPerUnit: costPerStockUnit > 0 ? costPerStockUnit : ing.costPerUnit,
+            costPerUnit: weightedCost,
             updatedAt: now,
           };
 
@@ -2859,11 +3023,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return updatedPurchase;
   };
 
-  const deletePurchase = async (purchaseId: string): Promise<void> => {
+  // Ubah hapus pembelian menjadi VOID (tanpa deleteDoc) dengan alasan dan jejak pengguna
+  const deletePurchase = async (purchaseId: string, reason?: string): Promise<void> => {
     const targetPurch = purchases.find(p => p.id === purchaseId);
     if (!targetPurch) throw new Error('Data pembelian tidak ditemukan');
+    if (targetPurch.status === 'VOID') {
+      throw new Error('Transaksi pembelian ini sudah berstatus VOID');
+    }
 
     const now = new Date().toISOString();
+    const voidReasonText = reason?.trim() || 'Dibatalkan / Void Pembelian';
+    const actorId = currentEmployee?.id || userProfile?.uid || 'user';
+    const actorName = currentEmployee?.name || userProfile?.displayName || 'User';
     const batch = writeBatch(db);
 
     // Revert Stock Additions
@@ -2879,7 +3050,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const product = productsMap.get(item.targetId);
           if (product) {
             const currentStock = typeof product.stock === 'number' ? product.stock : 0;
-            const newStock = Math.max(0, currentStock - stockAdded);
+            // Tahap 7: Hilangkan Math.max(0, ...) saat void/hapus pembelian
+            const newStock = currentStock - stockAdded;
+            const isInsufficient = currentStock < stockAdded;
+
+            if (isInsufficient) {
+              const deficit = stockAdded - currentStock;
+              const warningMsg = `Peringatan: Stok ${product.name} saat ini (${currentStock}) tidak cukup untuk membatalkan pembelian (${stockAdded}). Selisih kekurangan (${deficit}) dicatat sebagai ADJUSTMENT.`;
+              console.warn(warningMsg);
+              if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+                try {
+                  window.alert(warningMsg);
+                } catch {
+                  // ignore
+                }
+              }
+            }
+
             const prodRef = doc(db, 'products', product.id);
             batch.set(
               prodRef,
@@ -2887,31 +3074,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               { merge: true }
             );
 
-            const moveRef = doc(collection(db, 'stock_movements'));
-            batch.set(
-              moveRef,
-              sanitizeFirestore({
-                id: moveRef.id,
-                entityType: 'PRODUCT',
-                entityId: product.id,
-                entityName: product.name,
-                productId: product.id,
-                productName: product.name,
-                type: 'RETURN',
-                changeAmount: -stockAdded,
-                balanceAfter: newStock,
-                referenceId: targetPurch.purchaseNo || targetPurch.id,
-                notes: `Reversal Hapus Pembelian #${targetPurch.purchaseNo || targetPurch.id}`,
-                createdBy: userProfile?.uid || 'user',
-                createdAt: now,
-              })
-            );
+            const returnQty = Math.max(0, Math.min(currentStock, stockAdded));
+            if (returnQty > 0 || !isInsufficient) {
+              const moveRef = doc(collection(db, 'stock_movements'));
+              batch.set(
+                moveRef,
+                sanitizeFirestore({
+                  id: moveRef.id,
+                  entityType: 'PRODUCT',
+                  entityId: product.id,
+                  entityName: product.name,
+                  productId: product.id,
+                  productName: product.name,
+                  type: 'RETURN',
+                  changeAmount: isInsufficient ? -returnQty : -stockAdded,
+                  balanceAfter: isInsufficient ? 0 : newStock,
+                  referenceId: targetPurch.purchaseNo || targetPurch.id,
+                  notes: `Reversal Hapus Pembelian #${targetPurch.purchaseNo || targetPurch.id}`,
+                  createdBy: userProfile?.uid || 'user',
+                  createdAt: now,
+                })
+              );
+            }
+
+            if (isInsufficient) {
+              const deficit = stockAdded - currentStock;
+              const adjRef = doc(collection(db, 'stock_movements'));
+              batch.set(
+                adjRef,
+                sanitizeFirestore({
+                  id: adjRef.id,
+                  entityType: 'PRODUCT',
+                  entityId: product.id,
+                  entityName: product.name,
+                  productId: product.id,
+                  productName: product.name,
+                  type: 'ADJUSTMENT',
+                  changeAmount: -deficit,
+                  balanceAfter: newStock,
+                  referenceId: targetPurch.purchaseNo || targetPurch.id,
+                  notes: `Selisih stok tidak cukup saat void pembelian #${targetPurch.purchaseNo || targetPurch.id} (stok ada: ${currentStock}, ditarik: ${stockAdded})`,
+                  createdBy: userProfile?.uid || 'user',
+                  createdAt: now,
+                })
+              );
+            }
           }
         } else {
           const ing = ingredientsMap.get(item.targetId);
           if (ing) {
             const currentStock = typeof ing.stock === 'number' ? ing.stock : 0;
-            const newStock = Math.max(0, currentStock - stockAdded);
+            // Tahap 7: Hilangkan Math.max(0, ...) saat void/hapus pembelian
+            const newStock = currentStock - stockAdded;
+            const isInsufficient = currentStock < stockAdded;
+
+            if (isInsufficient) {
+              const deficit = stockAdded - currentStock;
+              const warningMsg = `Peringatan: Stok bahan ${ing.name} saat ini (${currentStock}) tidak cukup untuk membatalkan pembelian (${stockAdded}). Selisih kekurangan (${deficit}) dicatat sebagai ADJUSTMENT.`;
+              console.warn(warningMsg);
+              if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+                try {
+                  window.alert(warningMsg);
+                } catch {
+                  // ignore
+                }
+              }
+            }
+
             const ingRef = doc(db, 'ingredients', ing.id);
             batch.set(
               ingRef,
@@ -2919,45 +3148,99 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               { merge: true }
             );
 
-            const moveRef = doc(collection(db, 'stock_movements'));
-            batch.set(
-              moveRef,
-              sanitizeFirestore({
-                id: moveRef.id,
-                entityType: 'INGREDIENT',
-                entityId: ing.id,
-                entityName: ing.name,
-                ingredientId: ing.id,
-                ingredientName: ing.name,
-                type: 'RETURN',
-                changeAmount: -stockAdded,
-                balanceAfter: newStock,
-                referenceId: targetPurch.purchaseNo || targetPurch.id,
-                notes: `Reversal Hapus Pembelian #${targetPurch.purchaseNo || targetPurch.id}`,
-                createdBy: userProfile?.uid || 'user',
-                createdAt: now,
-              })
-            );
+            const returnQty = Math.max(0, Math.min(currentStock, stockAdded));
+            if (returnQty > 0 || !isInsufficient) {
+              const moveRef = doc(collection(db, 'stock_movements'));
+              batch.set(
+                moveRef,
+                sanitizeFirestore({
+                  id: moveRef.id,
+                  entityType: 'INGREDIENT',
+                  entityId: ing.id,
+                  entityName: ing.name,
+                  ingredientId: ing.id,
+                  ingredientName: ing.name,
+                  type: 'RETURN',
+                  changeAmount: isInsufficient ? -returnQty : -stockAdded,
+                  balanceAfter: isInsufficient ? 0 : newStock,
+                  referenceId: targetPurch.purchaseNo || targetPurch.id,
+                  notes: `Reversal Hapus Pembelian #${targetPurch.purchaseNo || targetPurch.id}`,
+                  createdBy: userProfile?.uid || 'user',
+                  createdAt: now,
+                })
+              );
+            }
+
+            if (isInsufficient) {
+              const deficit = stockAdded - currentStock;
+              const adjRef = doc(collection(db, 'stock_movements'));
+              batch.set(
+                adjRef,
+                sanitizeFirestore({
+                  id: adjRef.id,
+                  entityType: 'INGREDIENT',
+                  entityId: ing.id,
+                  entityName: ing.name,
+                  ingredientId: ing.id,
+                  ingredientName: ing.name,
+                  type: 'ADJUSTMENT',
+                  changeAmount: -deficit,
+                  balanceAfter: newStock,
+                  referenceId: targetPurch.purchaseNo || targetPurch.id,
+                  notes: `Selisih stok tidak cukup saat void pembelian #${targetPurch.purchaseNo || targetPurch.id} (stok ada: ${currentStock}, ditarik: ${stockAdded})`,
+                  createdBy: userProfile?.uid || 'user',
+                  createdAt: now,
+                })
+              );
+            }
           }
         }
       }
     }
 
-    // Revert Cash Mutations if any payments were recorded
-    if (targetPurch.paidAmount > 0) {
+    // Revert Cash Mutations per pembayaran ke sourceAccount masing-masing (fallback ke paymentSource untuk data lama)
+    const validPayments = (targetPurch.payments || []).filter(p => Number(p.amount) > 0);
+    if (validPayments.length > 0) {
+      for (const pay of validPayments) {
+        const refundAcc = normalizeCashAccount(
+          pay.sourceAccount || targetPurch.paymentSource || 'KAS_KASIR'
+        );
+        const mutRef = doc(collection(db, 'cash_mutations'));
+        batch.set(
+          mutRef,
+          sanitizeFirestore({
+            id: mutRef.id,
+            date: now.split('T')[0],
+            account: refundAcc,
+            type: 'PENYESUAIAN',
+            amount: pay.amount,
+            flow: 'IN',
+            referenceId: purchaseId,
+            title: `Reversal Hapus Pembelian #${targetPurch.purchaseNo || targetPurch.id}${
+              pay.paymentNo ? ` (${pay.paymentNo})` : ''
+            }`,
+            notes: `Pengembalian dana pembayaran ke ${getCashAccountLabel(refundAcc)} karena transaksi pembelian dihapus`,
+            createdBy: userProfile?.uid || 'user',
+            createdByName: userProfile?.displayName || 'User',
+            createdAt: now,
+          })
+        );
+      }
+    } else if (targetPurch.paidAmount > 0) {
+      const fallbackAcc = normalizeCashAccount(targetPurch.paymentSource || 'KAS_KASIR');
       const mutRef = doc(collection(db, 'cash_mutations'));
       batch.set(
         mutRef,
         sanitizeFirestore({
           id: mutRef.id,
           date: now.split('T')[0],
-          account: 'KAS_KASIR',
+          account: fallbackAcc,
           type: 'PENYESUAIAN',
           amount: targetPurch.paidAmount,
           flow: 'IN',
-          referenceId: targetPurch.id,
+          referenceId: purchaseId,
           title: `Reversal Hapus Pembelian #${targetPurch.purchaseNo || targetPurch.id}`,
-          notes: `Pengembalian dana pembayaran karena transaksi pembelian dihapus`,
+          notes: `Pengembalian dana pembayaran ke ${getCashAccountLabel(fallbackAcc)} karena transaksi pembelian dihapus`,
           createdBy: userProfile?.uid || 'user',
           createdByName: userProfile?.displayName || 'User',
           createdAt: now,
@@ -2965,20 +3248,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
-    // Delete purchase doc
+    // Tandai pembelian sebagai VOID (dilarang menghapus dokumen secara permanen)
     const purchRef = doc(db, 'purchases', purchaseId);
-    batch.delete(purchRef);
+    batch.set(
+      purchRef,
+      sanitizeFirestore({
+        ...targetPurch,
+        status: 'VOID',
+        paymentStatus: 'VOID',
+        voidReason: voidReasonText,
+        voidedAt: now,
+        voidedBy: actorId,
+        voidedByName: actorName,
+        updatedAt: now,
+      }),
+      { merge: true }
+    );
 
-    // Record Audit Log
+    // Record Audit Log secara atomik dalam batch
     const logRef = doc(collection(db, 'audit_logs'));
     batch.set(
       logRef,
       sanitizeFirestore({
         id: logRef.id,
-        action: 'HAPUS_PEMBELIAN',
-        details: `Menghapus transaksi pembelian #${targetPurch.purchaseNo || targetPurch.id} (${targetPurch.vendorName || targetPurch.supplier})`,
-        userUid: userProfile?.uid || 'user',
-        userName: userProfile?.displayName || 'User',
+        action: 'VOID_PEMBELIAN',
+        details: `Void transaksi pembelian #${targetPurch.purchaseNo || targetPurch.id} (${targetPurch.vendorName || targetPurch.supplier}). Alasan: ${voidReasonText}`,
+        userUid: actorId,
+        userName: actorName,
         createdAt: now,
       })
     );
@@ -2996,77 +3292,123 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes?: string;
     }
   ): Promise<PurchasePayment> => {
-    const targetPurch = purchases.find(p => p.id === purchaseId);
-    if (!targetPurch) throw new Error('Data pembelian tidak ditemukan');
-    if (paymentData.amount <= 0) throw new Error('Jumlah pembayaran harus lebih dari 0');
+    if (paymentData.amount <= 0) {
+      throw new Error('Jumlah pembayaran harus lebih dari 0');
+    }
 
-    if (paymentData.amount > targetPurch.remainingAmount) {
+    const mappedAcc = normalizeCashAccount(paymentData.sourceAccount);
+    const availableBalance = getAccountBalanceFromSummary(cashBalanceSummary, mappedAcc);
+
+    // Validasi saldo akun sumber cukup sebelum mutasi OUT; jika tidak cukup, tolak dengan pesan jelas
+    if (availableBalance < paymentData.amount) {
+      const accLabel = getCashAccountLabel(mappedAcc);
       throw new Error(
-        `Jumlah bayar (Rp ${paymentData.amount.toLocaleString('id-ID')}) melebihi sisa tagihan (Rp ${targetPurch.remainingAmount.toLocaleString('id-ID')})`
+        `Saldo akun ${accLabel} tidak mencukupi untuk melakukan pembayaran hutang. ` +
+        `Saldo tersedia: Rp ${Math.max(0, availableBalance).toLocaleString('id-ID')}, ` +
+        `dibutuhkan: Rp ${paymentData.amount.toLocaleString('id-ID')}.`
       );
     }
 
     const now = new Date().toISOString();
     const today = paymentData.date || now.split('T')[0];
-    const batch = writeBatch(db);
+    const actorId = currentEmployee?.id || userProfile?.uid || 'user';
+    const actorName = currentEmployee?.name || userProfile?.displayName || 'User';
 
-    const newPaidAmount = targetPurch.paidAmount + paymentData.amount;
-    const newRemaining = Math.max(0, targetPurch.totalAmount - newPaidAmount);
-    const newStatus: PaymentStatus = newRemaining <= 0 ? 'LUNAS' : 'SEBAGIAN';
+    // Eksekusi atomik runTransaction dengan membaca dokumen purchase terbaru langsung dari server (bukan dari state lokal)
+    const newPaymentLog = await runTransaction(db, async (transaction) => {
+      const purchRef = doc(db, 'purchases', purchaseId);
+      const purchSnap = await transaction.get(purchRef);
 
-    const payCount = (targetPurch.payments || []).length + 1;
-    const paymentNo = `PAY-${String(payCount).padStart(5, '0')}`;
+      if (!purchSnap.exists()) {
+        throw new Error('Data pembelian tidak ditemukan di server.');
+      }
 
-    const newPaymentLog: PurchasePayment = {
-      id: `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      purchaseId,
-      paymentNo,
-      date: today,
-      amount: paymentData.amount,
-      sourceAccount: paymentData.sourceAccount || 'KAS_KASIR',
-      reference: paymentData.reference || '',
-      notes: paymentData.notes || 'Pembayaran Tagihan Pembelian',
-      createdBy: userProfile?.uid || 'user',
-      createdAt: now,
-      updatedAt: now,
-    };
+      const targetPurch = { ...(purchSnap.data() as Purchase), id: purchSnap.id };
 
-    const updatedPayments = [...(targetPurch.payments || []), newPaymentLog];
+      if (targetPurch.status === 'VOID') {
+        throw new Error('Tidak dapat melakukan pembayaran pada transaksi pembelian yang sudah berstatus VOID.');
+      }
 
-    const purchRef = doc(db, 'purchases', purchaseId);
-    batch.set(
-      purchRef,
-      sanitizeFirestore({
-        ...targetPurch,
-        paidAmount: newPaidAmount,
-        remainingAmount: newRemaining,
-        paymentStatus: newStatus,
-        payments: updatedPayments,
+      const currentRemaining = typeof targetPurch.remainingAmount === 'number'
+        ? targetPurch.remainingAmount
+        : Math.max(0, targetPurch.totalAmount - (targetPurch.paidAmount || 0));
+
+      if (paymentData.amount > currentRemaining) {
+        throw new Error(
+          `Jumlah bayar (Rp ${paymentData.amount.toLocaleString('id-ID')}) melebihi sisa tagihan terkini di server (Rp ${currentRemaining.toLocaleString('id-ID')}).`
+        );
+      }
+
+      const newPaidAmount = (targetPurch.paidAmount || 0) + paymentData.amount;
+      const newRemaining = Math.max(0, targetPurch.totalAmount - newPaidAmount);
+      const newStatus: PaymentStatus = newRemaining <= 0 ? 'LUNAS' : 'SEBAGIAN';
+
+      const payCount = (targetPurch.payments || []).length + 1;
+      const paymentNo = `PAY-${String(payCount).padStart(5, '0')}`;
+
+      const createdPayment: PurchasePayment = {
+        id: `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        purchaseId,
+        paymentNo,
+        date: today,
+        amount: paymentData.amount,
+        sourceAccount: mappedAcc,
+        reference: paymentData.reference || '',
+        notes: paymentData.notes || 'Pembayaran Tagihan Pembelian',
+        createdBy: actorId,
+        createdAt: now,
         updatedAt: now,
-      }),
-      { merge: true }
-    );
+      };
 
-    const mappedAcc = normalizeCashAccount(paymentData.sourceAccount);
+      const updatedPayments = [...(targetPurch.payments || []), createdPayment];
 
-    const mutRef = doc(collection(db, 'cash_mutations'));
-    const cashMut: CashMutation = {
-      id: mutRef.id,
-      date: today,
-      account: mappedAcc,
-      type: 'PENGELUARAN',
-      amount: paymentData.amount,
-      flow: 'OUT',
-      referenceId: purchaseId,
-      title: `Bayar #${paymentNo} (${targetPurch.purchaseNo || targetPurch.id}) - ${targetPurch.vendorName || targetPurch.supplier}`,
-      notes: `Pembayaran via ${getCashAccountLabel(mappedAcc)}${paymentData.notes ? ` - ${paymentData.notes}` : ''}`,
-      createdBy: userProfile?.uid || 'user',
-      createdByName: userProfile?.displayName || 'User',
-      createdAt: now,
-    };
-    batch.set(mutRef, sanitizeFirestore(cashMut));
+      // 1. Update purchase document di server
+      transaction.set(
+        purchRef,
+        sanitizeFirestore({
+          ...targetPurch,
+          paidAmount: newPaidAmount,
+          remainingAmount: newRemaining,
+          paymentStatus: newStatus,
+          payments: updatedPayments,
+          updatedAt: now,
+        }),
+        { merge: true }
+      );
 
-    await batch.commit();
+      // 2. Buat mutasi pengeluaran kas (OUT) dari akun sumber
+      const mutRef = doc(collection(db, 'cash_mutations'));
+      const cashMut: CashMutation = {
+        id: mutRef.id,
+        date: today,
+        account: mappedAcc,
+        type: 'PENGELUARAN',
+        amount: paymentData.amount,
+        flow: 'OUT',
+        referenceId: purchaseId,
+        title: `Bayar #${paymentNo} (${targetPurch.purchaseNo || targetPurch.id}) - ${targetPurch.vendorName || targetPurch.supplier || 'Supplier'}`,
+        notes: `Pembayaran via ${getCashAccountLabel(mappedAcc)}${paymentData.notes ? ` - ${paymentData.notes}` : ''}`,
+        createdBy: actorId,
+        createdByName: actorName,
+        createdAt: now,
+      };
+      transaction.set(mutRef, sanitizeFirestore(cashMut));
+
+      // 3. Catat audit log secara atomik
+      const auditRef = doc(collection(db, 'audit_logs'));
+      const auditLog: AuditLog = {
+        id: auditRef.id,
+        action: 'BAYAR_PEMBELIAN',
+        details: `Bayar hutang pembelian #${targetPurch.purchaseNo || targetPurch.id} sebesar Rp ${paymentData.amount.toLocaleString('id-ID')} via ${getCashAccountLabel(mappedAcc)} (${paymentNo})`,
+        userUid: actorId,
+        userName: actorName,
+        createdAt: now,
+      };
+      transaction.set(auditRef, sanitizeFirestore(auditLog));
+
+      return createdPayment;
+    });
+
     return newPaymentLog;
   };
 
@@ -3074,45 +3416,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     purchaseId: string,
     paymentId: string
   ): Promise<void> => {
-    const targetPurch = purchases.find(p => p.id === purchaseId);
-    if (!targetPurch) throw new Error('Data pembelian tidak ditemukan');
-
-    const targetPayment = (targetPurch.payments || []).find(p => p.id === paymentId);
-    if (!targetPayment) throw new Error('Data pembayaran tidak ditemukan');
-
     const now = new Date().toISOString();
-    const batch = writeBatch(db);
+    const actorId = currentEmployee?.id || userProfile?.uid || 'user';
+    const actorName = currentEmployee?.name || userProfile?.displayName || 'User';
 
-    const newPaidAmount = Math.max(0, targetPurch.paidAmount - targetPayment.amount);
-    const newRemaining = Math.max(0, targetPurch.totalAmount - newPaidAmount);
-    const newStatus: PaymentStatus =
-      newPaidAmount === 0
-        ? 'BELUM_DIBAYAR'
-        : newPaidAmount >= targetPurch.totalAmount
-        ? 'LUNAS'
-        : 'SEBAGIAN';
+    // Eksekusi atomik runTransaction dengan membaca dokumen purchase terbaru langsung dari server (bukan dari state lokal)
+    await runTransaction(db, async (transaction) => {
+      const purchRef = doc(db, 'purchases', purchaseId);
+      const purchSnap = await transaction.get(purchRef);
 
-    const updatedPayments = (targetPurch.payments || []).filter(p => p.id !== paymentId);
+      if (!purchSnap.exists()) {
+        throw new Error('Data pembelian tidak ditemukan di server.');
+      }
 
-    const purchRef = doc(db, 'purchases', purchaseId);
-    batch.set(
-      purchRef,
-      sanitizeFirestore({
-        ...targetPurch,
-        paidAmount: newPaidAmount,
-        remainingAmount: newRemaining,
-        paymentStatus: newStatus,
-        payments: updatedPayments,
-        updatedAt: now,
-      }),
-      { merge: true }
-    );
+      const targetPurch = { ...(purchSnap.data() as Purchase), id: purchSnap.id };
 
-    const mappedAcc = normalizeCashAccount(targetPayment.sourceAccount);
-    const mutRef = doc(collection(db, 'cash_mutations'));
-    batch.set(
-      mutRef,
-      sanitizeFirestore({
+      if (targetPurch.status === 'VOID') {
+        throw new Error('Tidak dapat membatalkan pembayaran pada transaksi pembelian yang sudah berstatus VOID.');
+      }
+
+      const targetPayment = (targetPurch.payments || []).find(p => p.id === paymentId);
+      if (!targetPayment) {
+        throw new Error('Data pembayaran tidak ditemukan pada dokumen pembelian di server.');
+      }
+
+      const newPaidAmount = Math.max(0, (targetPurch.paidAmount || 0) - targetPayment.amount);
+      const newRemaining = Math.max(0, targetPurch.totalAmount - newPaidAmount);
+      const newStatus: PaymentStatus =
+        newPaidAmount === 0
+          ? 'BELUM_DIBAYAR'
+          : newPaidAmount >= targetPurch.totalAmount
+          ? 'LUNAS'
+          : 'SEBAGIAN';
+
+      const updatedPayments = (targetPurch.payments || []).filter(p => p.id !== paymentId);
+
+      // 1. Update purchase document di server
+      transaction.set(
+        purchRef,
+        sanitizeFirestore({
+          ...targetPurch,
+          paidAmount: newPaidAmount,
+          remainingAmount: newRemaining,
+          paymentStatus: newStatus,
+          payments: updatedPayments,
+          updatedAt: now,
+        }),
+        { merge: true }
+      );
+
+      // 2. Buat mutasi pengembalian dana (reversal IN) ke akun sumber pembayaran
+      const mappedAcc = normalizeCashAccount(targetPayment.sourceAccount);
+      const mutRef = doc(collection(db, 'cash_mutations'));
+      const cashMut: CashMutation = {
         id: mutRef.id,
         date: now.split('T')[0],
         account: mappedAcc,
@@ -3122,13 +3478,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         referenceId: purchaseId,
         title: `Batal Pembayaran #${targetPayment.paymentNo || targetPayment.id} (${targetPurch.purchaseNo || targetPurch.id})`,
         notes: `Pembatalan mutasi pembayaran via ${getCashAccountLabel(mappedAcc)}`,
-        createdBy: userProfile?.uid || 'user',
-        createdByName: userProfile?.displayName || 'User',
+        createdBy: actorId,
+        createdByName: actorName,
         createdAt: now,
-      })
-    );
+      };
+      transaction.set(mutRef, sanitizeFirestore(cashMut));
 
-    await batch.commit();
+      // 3. Catat audit log secara atomik
+      const auditRef = doc(collection(db, 'audit_logs'));
+      const auditLog: AuditLog = {
+        id: auditRef.id,
+        action: 'BATAL_BAYAR_PEMBELIAN',
+        details: `Batalkan pembayaran hutang #${targetPayment.paymentNo || targetPayment.id} pembelian #${targetPurch.purchaseNo || targetPurch.id} sebesar Rp ${targetPayment.amount.toLocaleString('id-ID')} ke ${getCashAccountLabel(mappedAcc)}`,
+        userUid: actorId,
+        userName: actorName,
+        createdAt: now,
+      };
+      transaction.set(auditRef, sanitizeFirestore(auditLog));
+    });
   };
 
   const payPurchaseDebt = async (
@@ -3165,7 +3532,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const product = productsMap.get(item.targetId);
           if (product) {
             const currentStock = typeof product.stock === 'number' ? product.stock : 0;
-            const newStock = Math.max(0, currentStock - stockAdded);
+            // Tahap 7: Hilangkan Math.max(0, ...) saat void pembelian
+            const newStock = currentStock - stockAdded;
+            const isInsufficient = currentStock < stockAdded;
+
+            if (isInsufficient) {
+              const deficit = stockAdded - currentStock;
+              const warningMsg = `Peringatan: Stok ${product.name} saat ini (${currentStock}) tidak cukup untuk membatalkan pembelian (${stockAdded}). Selisih kekurangan (${deficit}) dicatat sebagai ADJUSTMENT.`;
+              console.warn(warningMsg);
+              if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+                try {
+                  window.alert(warningMsg);
+                } catch {
+                  // ignore
+                }
+              }
+            }
+
             const prodRef = doc(db, 'products', product.id);
             batch.set(
               prodRef,
@@ -3173,31 +3556,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               { merge: true }
             );
 
-            const moveRef = doc(collection(db, 'stock_movements'));
-            batch.set(
-              moveRef,
-              sanitizeFirestore({
-                id: moveRef.id,
-                entityType: 'PRODUCT',
-                entityId: product.id,
-                entityName: product.name,
-                productId: product.id,
-                productName: product.name,
-                type: 'RETURN',
-                changeAmount: -stockAdded,
-                balanceAfter: newStock,
-                referenceId: targetPurch.purchaseNo || targetPurch.id,
-                notes: `Void Pembelian #${targetPurch.purchaseNo || targetPurch.id}: ${reason}`,
-                createdBy: userProfile?.uid || 'user',
-                createdAt: now,
-              })
-            );
+            const returnQty = Math.max(0, Math.min(currentStock, stockAdded));
+            if (returnQty > 0 || !isInsufficient) {
+              const moveRef = doc(collection(db, 'stock_movements'));
+              batch.set(
+                moveRef,
+                sanitizeFirestore({
+                  id: moveRef.id,
+                  entityType: 'PRODUCT',
+                  entityId: product.id,
+                  entityName: product.name,
+                  productId: product.id,
+                  productName: product.name,
+                  type: 'RETURN',
+                  changeAmount: isInsufficient ? -returnQty : -stockAdded,
+                  balanceAfter: isInsufficient ? 0 : newStock,
+                  referenceId: targetPurch.purchaseNo || targetPurch.id,
+                  notes: `Void Pembelian #${targetPurch.purchaseNo || targetPurch.id}: ${reason}`,
+                  createdBy: userProfile?.uid || 'user',
+                  createdAt: now,
+                })
+              );
+            }
+
+            if (isInsufficient) {
+              const deficit = stockAdded - currentStock;
+              const adjRef = doc(collection(db, 'stock_movements'));
+              batch.set(
+                adjRef,
+                sanitizeFirestore({
+                  id: adjRef.id,
+                  entityType: 'PRODUCT',
+                  entityId: product.id,
+                  entityName: product.name,
+                  productId: product.id,
+                  productName: product.name,
+                  type: 'ADJUSTMENT',
+                  changeAmount: -deficit,
+                  balanceAfter: newStock,
+                  referenceId: targetPurch.purchaseNo || targetPurch.id,
+                  notes: `Selisih stok tidak cukup saat void pembelian #${targetPurch.purchaseNo || targetPurch.id} (stok ada: ${currentStock}, ditarik: ${stockAdded})`,
+                  createdBy: userProfile?.uid || 'user',
+                  createdAt: now,
+                })
+              );
+            }
           }
         } else {
           const ing = ingredientsMap.get(item.targetId);
           if (ing) {
             const currentStock = typeof ing.stock === 'number' ? ing.stock : 0;
-            const newStock = Math.max(0, currentStock - stockAdded);
+            // Tahap 7: Hilangkan Math.max(0, ...) saat void pembelian
+            const newStock = currentStock - stockAdded;
+            const isInsufficient = currentStock < stockAdded;
+
+            if (isInsufficient) {
+              const deficit = stockAdded - currentStock;
+              const warningMsg = `Peringatan: Stok bahan ${ing.name} saat ini (${currentStock}) tidak cukup untuk membatalkan pembelian (${stockAdded}). Selisih kekurangan (${deficit}) dicatat sebagai ADJUSTMENT.`;
+              console.warn(warningMsg);
+              if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+                try {
+                  window.alert(warningMsg);
+                } catch {
+                  // ignore
+                }
+              }
+            }
+
             const ingRef = doc(db, 'ingredients', ing.id);
             batch.set(
               ingRef,
@@ -3205,44 +3630,99 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               { merge: true }
             );
 
-            const moveRef = doc(collection(db, 'stock_movements'));
-            batch.set(
-              moveRef,
-              sanitizeFirestore({
-                id: moveRef.id,
-                entityType: 'INGREDIENT',
-                entityId: ing.id,
-                entityName: ing.name,
-                ingredientId: ing.id,
-                ingredientName: ing.name,
-                type: 'RETURN',
-                changeAmount: -stockAdded,
-                balanceAfter: newStock,
-                referenceId: targetPurch.purchaseNo || targetPurch.id,
-                notes: `Void Pembelian #${targetPurch.purchaseNo || targetPurch.id}: ${reason}`,
-                createdBy: userProfile?.uid || 'user',
-                createdAt: now,
-              })
-            );
+            const returnQty = Math.max(0, Math.min(currentStock, stockAdded));
+            if (returnQty > 0 || !isInsufficient) {
+              const moveRef = doc(collection(db, 'stock_movements'));
+              batch.set(
+                moveRef,
+                sanitizeFirestore({
+                  id: moveRef.id,
+                  entityType: 'INGREDIENT',
+                  entityId: ing.id,
+                  entityName: ing.name,
+                  ingredientId: ing.id,
+                  ingredientName: ing.name,
+                  type: 'RETURN',
+                  changeAmount: isInsufficient ? -returnQty : -stockAdded,
+                  balanceAfter: isInsufficient ? 0 : newStock,
+                  referenceId: targetPurch.purchaseNo || targetPurch.id,
+                  notes: `Void Pembelian #${targetPurch.purchaseNo || targetPurch.id}: ${reason}`,
+                  createdBy: userProfile?.uid || 'user',
+                  createdAt: now,
+                })
+              );
+            }
+
+            if (isInsufficient) {
+              const deficit = stockAdded - currentStock;
+              const adjRef = doc(collection(db, 'stock_movements'));
+              batch.set(
+                adjRef,
+                sanitizeFirestore({
+                  id: adjRef.id,
+                  entityType: 'INGREDIENT',
+                  entityId: ing.id,
+                  entityName: ing.name,
+                  ingredientId: ing.id,
+                  ingredientName: ing.name,
+                  type: 'ADJUSTMENT',
+                  changeAmount: -deficit,
+                  balanceAfter: newStock,
+                  referenceId: targetPurch.purchaseNo || targetPurch.id,
+                  notes: `Selisih stok tidak cukup saat void pembelian #${targetPurch.purchaseNo || targetPurch.id} (stok ada: ${currentStock}, ditarik: ${stockAdded})`,
+                  createdBy: userProfile?.uid || 'user',
+                  createdAt: now,
+                })
+              );
+            }
           }
         }
       }
     }
 
-    if (targetPurch.paidAmount > 0) {
+    // Refund per pembayaran di purchase.payments ke sourceAccount masing-masing (fallback ke paymentSource untuk data lama)
+    const validPayments = (targetPurch.payments || []).filter(p => Number(p.amount) > 0);
+    if (validPayments.length > 0) {
+      for (const pay of validPayments) {
+        const refundAcc = normalizeCashAccount(
+          pay.sourceAccount || targetPurch.paymentSource || 'KAS_KASIR'
+        );
+        const mutRef = doc(collection(db, 'cash_mutations'));
+        batch.set(
+          mutRef,
+          sanitizeFirestore({
+            id: mutRef.id,
+            date: now.split('T')[0],
+            account: refundAcc,
+            type: 'PENYESUAIAN',
+            amount: pay.amount,
+            flow: 'IN',
+            referenceId: purchaseId,
+            title: `Void Pembelian #${targetPurch.purchaseNo || targetPurch.id}${
+              pay.paymentNo ? ` (${pay.paymentNo})` : ''
+            }`,
+            notes: `Pengembalian dana void pembelian ke ${getCashAccountLabel(refundAcc)}: ${reason}`,
+            createdBy: userProfile?.uid || 'user',
+            createdByName: userProfile?.displayName || 'User',
+            createdAt: now,
+          })
+        );
+      }
+    } else if (targetPurch.paidAmount > 0) {
+      const fallbackAcc = normalizeCashAccount(targetPurch.paymentSource || 'KAS_KASIR');
       const mutRef = doc(collection(db, 'cash_mutations'));
       batch.set(
         mutRef,
         sanitizeFirestore({
           id: mutRef.id,
           date: now.split('T')[0],
-          account: 'KAS_KASIR',
+          account: fallbackAcc,
           type: 'PENYESUAIAN',
           amount: targetPurch.paidAmount,
           flow: 'IN',
-          referenceId: targetPurch.id,
+          referenceId: purchaseId,
           title: `Void Pembelian #${targetPurch.purchaseNo || targetPurch.id}`,
-          notes: `Pengembalian dana void pembelian: ${reason}`,
+          notes: `Pengembalian dana void pembelian ke ${getCashAccountLabel(fallbackAcc)}: ${reason}`,
           createdBy: userProfile?.uid || 'user',
           createdByName: userProfile?.displayName || 'User',
           createdAt: now,
@@ -3250,6 +3730,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
+    const actorId = currentEmployee?.id || userProfile?.uid || 'user';
+    const actorName = currentEmployee?.name || userProfile?.displayName || 'User';
     const purchRef = doc(db, 'purchases', purchaseId);
     batch.set(
       purchRef,
@@ -3259,9 +3741,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         paymentStatus: 'VOID',
         voidReason: reason,
         voidedAt: now,
+        voidedBy: actorId,
+        voidedByName: actorName,
         updatedAt: now,
       }),
       { merge: true }
+    );
+
+    // Catat Audit Log void pembelian secara atomik
+    const logRef = doc(collection(db, 'audit_logs'));
+    batch.set(
+      logRef,
+      sanitizeFirestore({
+        id: logRef.id,
+        action: 'VOID_PEMBELIAN',
+        details: `Void transaksi pembelian #${targetPurch.purchaseNo || targetPurch.id} (${targetPurch.vendorName || targetPurch.supplier}). Alasan: ${reason}`,
+        userUid: actorId,
+        userName: actorName,
+        createdAt: now,
+      })
     );
 
     await batch.commit();
@@ -3927,10 +4425,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     paymentSource: ExpensePaymentSource = 'KAS_KASIR',
     date?: string
   ) => {
+    const batch = writeBatch(db);
     const expRef = doc(collection(db, 'expenses'));
     const canonicalSource = normalizeCashAccount(paymentSource, note);
     const nowIso = new Date().toISOString();
     const expDate = date || nowIso.split('T')[0];
+    const actorId = currentEmployee?.id || userProfile?.uid || 'user';
+    const actorName = currentEmployee?.name || userProfile?.displayName || 'Owner ARY';
     const exp: Expense = {
       id: expRef.id,
       date: expDate,
@@ -3938,24 +4439,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       amount,
       paymentSource: canonicalSource,
       note: note || '',
-      createdBy: currentEmployee?.id || userProfile?.uid || 'user',
-      createdByName: currentEmployee?.name || userProfile?.displayName || 'Owner ARY',
+      status: 'COMPLETED',
+      createdBy: actorId,
+      createdByName: actorName,
       createdAt: nowIso,
     };
-    await setDoc(expRef, sanitizeFirestore(exp));
+    batch.set(expRef, sanitizeFirestore(exp));
 
-    // Also record audit log
+    // Catat audit log secara atomik dalam batch yang sama
     const auditRef = doc(collection(db, 'audit_logs'));
-    await setDoc(auditRef, sanitizeFirestore({
+    batch.set(auditRef, sanitizeFirestore({
       id: auditRef.id,
       action: 'EXPENSE_RECORDED',
       details: `Biaya Operasional [${category.toUpperCase()}] via ${getCashAccountLabel(canonicalSource)}: Rp ${amount.toLocaleString('id-ID')} ${note ? `(${note})` : ''}`,
-      userUid: currentEmployee?.id || userProfile?.uid || 'user',
-      userName: currentEmployee?.name || userProfile?.displayName || 'User',
+      userUid: actorId,
+      userName: actorName,
       createdAt: nowIso,
     }));
+
+    await batch.commit();
   };
 
+  // Simpan nilai lama di array history (amount, category, paymentSource, changedAt, changedBy) secara atomik
   const updateExpense = async (
     id: string,
     data: {
@@ -3967,10 +4472,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   ) => {
     const existing = expenses.find((e) => e.id === id);
+    if (!existing) throw new Error('Data pengeluaran tidak ditemukan');
+    if (existing.status === 'VOID') {
+      throw new Error('Pengeluaran yang sudah di-VOID tidak dapat diubah');
+    }
+
     const nowIso = new Date().toISOString();
+    const actorId = currentEmployee?.id || userProfile?.uid || 'user';
+    const actorName = currentEmployee?.name || userProfile?.displayName || 'User';
     const canonicalSource = data.paymentSource
-      ? normalizeCashAccount(data.paymentSource, data.note ?? existing?.note)
-      : existing?.paymentSource;
+      ? normalizeCashAccount(data.paymentSource, data.note ?? existing.note)
+      : existing.paymentSource || 'KAS_KASIR';
+
+    const historyEntry: ExpenseHistoryEntry = {
+      amount: existing.amount,
+      category: existing.category,
+      paymentSource: existing.paymentSource || 'KAS_KASIR',
+      note: existing.note,
+      date: existing.date,
+      changedAt: nowIso,
+      changedBy: actorId,
+      changedByName: actorName,
+    };
+    const nextHistory: ExpenseHistoryEntry[] = [
+      ...(existing.history || []),
+      historyEntry,
+    ];
 
     const updatedFields: Partial<Expense> = {
       ...(data.category !== undefined ? { category: data.category } : {}),
@@ -3978,35 +4505,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...(data.note !== undefined ? { note: data.note } : {}),
       ...(canonicalSource !== undefined ? { paymentSource: canonicalSource } : {}),
       ...(data.date !== undefined ? { date: data.date } : {}),
+      history: nextHistory,
       updatedAt: nowIso,
     };
 
-    await updateDoc(doc(db, 'expenses', id), sanitizeFirestore(updatedFields));
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'expenses', id), sanitizeFirestore(updatedFields), { merge: true });
 
     const auditRef = doc(collection(db, 'audit_logs'));
-    await setDoc(auditRef, sanitizeFirestore({
+    batch.set(auditRef, sanitizeFirestore({
       id: auditRef.id,
       action: 'EXPENSE_UPDATED',
-      details: `Ubah Biaya Operasional [${(data.category || existing?.category || '').toUpperCase()}]: Rp ${(data.amount ?? existing?.amount ?? 0).toLocaleString('id-ID')} (${data.note ?? existing?.note ?? '-'})`,
-      userUid: currentEmployee?.id || userProfile?.uid || 'user',
-      userName: currentEmployee?.name || userProfile?.displayName || 'User',
+      details: `Ubah Biaya Operasional [${(data.category || existing.category || '').toUpperCase()}]: dari Rp ${existing.amount.toLocaleString('id-ID')} (${existing.paymentSource || 'KAS_KASIR'}) menjadi Rp ${(data.amount ?? existing.amount ?? 0).toLocaleString('id-ID')} (${canonicalSource})`,
+      userUid: actorId,
+      userName: actorName,
       createdAt: nowIso,
     }));
+
+    await batch.commit();
   };
 
-  const deleteExpense = async (id: string) => {
+  // Ubah hapus pengeluaran menjadi VOID (status 'VOID', voidReason, voidedAt, voidedBy) tanpa deleteDoc
+  const deleteExpense = async (id: string, reason?: string) => {
     const existing = expenses.find((e) => e.id === id);
-    await deleteDoc(doc(db, 'expenses', id));
+    if (!existing) throw new Error('Data pengeluaran tidak ditemukan');
+    if (existing.status === 'VOID') return;
+
+    const nowIso = new Date().toISOString();
+    const voidReasonText = reason?.trim() || 'Dibatalkan oleh pengguna';
+    const actorId = currentEmployee?.id || userProfile?.uid || 'user';
+    const actorName = currentEmployee?.name || userProfile?.displayName || 'User';
+
+    const batch = writeBatch(db);
+    batch.set(
+      doc(db, 'expenses', id),
+      sanitizeFirestore({
+        status: 'VOID',
+        voidReason: voidReasonText,
+        voidedAt: nowIso,
+        voidedBy: actorId,
+        voidedByName: actorName,
+        updatedAt: nowIso,
+      }),
+      { merge: true }
+    );
 
     const auditRef = doc(collection(db, 'audit_logs'));
-    await setDoc(auditRef, sanitizeFirestore({
+    batch.set(auditRef, sanitizeFirestore({
       id: auditRef.id,
-      action: 'EXPENSE_DELETED',
-      details: `Hapus Biaya Operasional [${(existing?.category || '').toUpperCase()}]: Rp ${(existing?.amount ?? 0).toLocaleString('id-ID')} (${existing?.note || '-'})`,
-      userUid: currentEmployee?.id || userProfile?.uid || 'user',
-      userName: currentEmployee?.name || userProfile?.displayName || 'User',
-      createdAt: new Date().toISOString(),
+      action: 'EXPENSE_VOIDED',
+      details: `Void Biaya Operasional [${(existing.category || '').toUpperCase()}]: Rp ${(existing.amount ?? 0).toLocaleString('id-ID')} (${existing.note || '-'}). Alasan: ${voidReasonText}`,
+      userUid: actorId,
+      userName: actorName,
+      createdAt: nowIso,
     }));
+
+    await batch.commit();
   };
 
   const addCashMutation = async (params: {
@@ -4299,70 +4853,133 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): Promise<Employee> => {
     const empRef = doc(collection(db, 'employees'));
     const now = new Date().toISOString();
+    const batch = writeBatch(db);
 
     let newEmp: Employee;
+    let rawPin = '';
+
     if (typeof employeeData === 'string') {
       newEmp = {
         id: empRef.id,
         name: employeeData.trim(),
         position: position || 'Kasir',
         role: position?.toUpperCase().includes('KASIR') ? 'KASIR' : 'KARYAWAN',
-        dailyWage: dailyWage || 80000,
+        dailyWage: Math.max(0, dailyWage || 80000),
         active: true,
+        hasPin: false,
         createdAt: now,
         updatedAt: now,
       };
     } else {
+      rawPin = (employeeData.pin || '').trim();
       newEmp = {
         id: empRef.id,
         name: (employeeData.name || '').trim(),
         username: (employeeData.username || '').trim().toLowerCase() || undefined,
-        pin: (employeeData.pin || '').trim() || undefined,
+        hasPin: Boolean(rawPin),
         email: (employeeData.email || '').trim().toLowerCase() || undefined,
         role: employeeData.role || 'KARYAWAN',
         position: employeeData.position || (employeeData.role === 'KASIR' ? 'Kasir' : 'Karyawan'),
         phone: employeeData.phone || undefined,
-        dailyWage: typeof employeeData.dailyWage === 'number' ? employeeData.dailyWage : 80000,
+        dailyWage: Math.max(0, typeof employeeData.dailyWage === 'number' ? employeeData.dailyWage : 80000),
         active: employeeData.active !== false,
         createdAt: now,
         updatedAt: now,
       };
     }
 
-    await setDoc(empRef, sanitizeFirestore(newEmp));
+    // Simpan profil karyawan tanpa field PIN plaintext
+    batch.set(empRef, sanitizeFirestore(newEmp));
+
+    // Jika PIN diisi, simpan kredensial Hash + Salt di koleksi /staff/{id} (tidak bisa dibaca KASIR)
+    if (rawPin) {
+      const { pinHash, pinSalt } = await createHashedPinCredentials(rawPin);
+      const staffDoc: Staff = {
+        id: empRef.id,
+        employeeId: empRef.id,
+        username: newEmp.username || empRef.id,
+        name: newEmp.name,
+        pinHash,
+        pinSalt,
+        role: newEmp.role,
+        active: newEmp.active,
+        createdAt: now,
+        updatedAt: now,
+      };
+      batch.set(doc(db, 'staff', empRef.id), sanitizeFirestore(staffDoc));
+    }
+
+    await batch.commit();
     return newEmp;
   };
 
   const updateEmployee = async (id: string, data: Partial<Employee>) => {
     const empRef = doc(db, 'employees', id);
-    const updateData = {
-      ...data,
-      updatedAt: new Date().toISOString(),
+    const now = new Date().toISOString();
+    const batch = writeBatch(db);
+
+    const rawPin = (data.pin || '').trim();
+    const { pin: _ignoredPlaintextPin, pinHash: _ignoredHash, pinSalt: _ignoredSalt, ...safeData } = data;
+
+    const updateData: Record<string, unknown> = {
+      ...safeData,
+      ...(typeof safeData.dailyWage === 'number'
+        ? { dailyWage: Math.max(0, safeData.dailyWage) }
+        : {}),
+      ...(rawPin ? { hasPin: true, pin: deleteField(), pinHash: deleteField(), pinSalt: deleteField() } : {}),
+      updatedAt: now,
     };
-    await updateDoc(empRef, sanitizeFirestore(updateData));
+
+    batch.update(empRef, sanitizeFirestore(updateData));
+
+    // Jika ada pembaruan PIN atau perubahan atribut staf, sinkronkan ke /staff/{id} secara atomik
+    const existingEmp = employees.find(e => e.id === id);
+    if (rawPin) {
+      const { pinHash, pinSalt } = await createHashedPinCredentials(rawPin);
+      batch.set(
+        doc(db, 'staff', id),
+        sanitizeFirestore({
+          id,
+          employeeId: id,
+          username: safeData.username || existingEmp?.username || id,
+          name: safeData.name || existingEmp?.name || 'Staf',
+          pinHash,
+          pinSalt,
+          role: safeData.role || existingEmp?.role || 'KASIR',
+          active: safeData.active !== undefined ? safeData.active : existingEmp?.active !== false,
+          createdAt: existingEmp?.createdAt || now,
+          updatedAt: now,
+        }),
+        { merge: true }
+      );
+    }
+
+    await batch.commit();
   };
 
   const toggleEmployeeStatus = async (id: string, active: boolean) => {
-    await updateDoc(doc(db, 'employees', id), {
+    const now = new Date().toISOString();
+    const batch = writeBatch(db);
+
+    batch.update(doc(db, 'employees', id), {
       active,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
     });
+
     if (!active) {
-      try {
-        await setDoc(
-          doc(db, 'system_locks', 'active_cashier'),
-          sanitizeFirestore({
-            isActive: false,
-            employeeId: null,
-            employeeName: null,
-            username: null,
-            logoutAt: new Date().toISOString(),
-          })
-        );
-      } catch {
-        // ignore
-      }
+      batch.set(
+        doc(db, 'system_locks', 'active_cashier'),
+        sanitizeFirestore({
+          isActive: false,
+          employeeId: null,
+          employeeName: null,
+          username: null,
+          logoutAt: now,
+        })
+      );
     }
+
+    await batch.commit();
   };
 
   const deleteEmployee = async (id: string) => {
@@ -4396,27 +5013,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (status === 'HADIR' || status === 'PRESENT') {
       wagePaid = dailyWage;
-    } else if (status === 'OVERTIME') {
+    } else if (status === 'OVERTIME' || status === 'LEMBUR') {
       const hourlyRate = dailyWage / 8;
       wagePaid = dailyWage + overtimeHours * (hourlyRate * 1.5);
     }
 
-    // Check if attendance already exists today for this employee
+    const cleanWage = Math.round(wagePaid);
     const existingAtt = attendance.find(a => a.employeeId === employeeId && a.date === todayDate);
+    const targetAttId = existingAtt ? existingAtt.id : doc(collection(db, 'attendance')).id;
+    const actorId = currentEmployee?.id || userProfile?.uid || 'user';
+    const actorName = currentEmployee?.name || userProfile?.displayName || 'User';
 
+    const batch = writeBatch(db);
+
+    // 1. Simpan/Update Dokumen Attendance
     if (existingAtt) {
-      await updateDoc(doc(db, 'attendance', existingAtt.id), sanitizeFirestore({
+      batch.update(doc(db, 'attendance', existingAtt.id), sanitizeFirestore({
         status,
         overtimeHours,
-        wagePaid: Math.round(wagePaid),
+        wagePaid: cleanWage,
         wageAmount: dailyWage,
         notes: notes || existingAtt.notes || '',
         updatedAt: nowIso,
       }));
     } else {
-      const attRef = doc(collection(db, 'attendance'));
       const att: Attendance = {
-        id: attRef.id,
+        id: targetAttId,
         employeeId,
         employeeName,
         userUid: emp?.uid || employeeId,
@@ -4424,14 +5046,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         checkInAt: nowIso,
         status,
         overtimeHours,
-        wagePaid: Math.round(wagePaid),
+        wagePaid: cleanWage,
         wageAmount: dailyWage,
         notes: notes || '',
         createdAt: nowIso,
         updatedAt: nowIso,
       };
-      await setDoc(attRef, sanitizeFirestore(att));
+      batch.set(doc(db, 'attendance', targetAttId), sanitizeFirestore(att));
     }
+
+    // 2. Tahap 7: Otomatis buat / sinkronkan expense kategori 'gaji' (referenceId = attendanceId, cegah dobel)
+    const existingWageExp = expenses.find(
+      e => e.referenceId === targetAttId && e.category === 'gaji' && e.status !== 'VOID'
+    );
+
+    if (cleanWage > 0) {
+      if (existingWageExp) {
+        // Perbarui nominal pengeluaran jika gaji berubah (mis. tambah jam lembur)
+        const expRef = doc(db, 'expenses', existingWageExp.id);
+        batch.update(expRef, sanitizeFirestore({
+          amount: cleanWage,
+          note: `Gaji harian presensi ${employeeName} (${status}${overtimeHours > 0 ? ` +${overtimeHours} jam` : ''})`,
+          updatedAt: nowIso,
+        }));
+      } else {
+        // Buat dokumen pengeluaran baru secara atomik
+        const expRef = doc(collection(db, 'expenses'));
+        const newExpense: Expense = {
+          id: expRef.id,
+          date: todayDate,
+          category: 'gaji',
+          amount: cleanWage,
+          paymentSource: 'KAS_KASIR',
+          note: `Gaji harian presensi ${employeeName} (${status}${overtimeHours > 0 ? ` +${overtimeHours} jam` : ''})`,
+          referenceId: targetAttId,
+          status: 'COMPLETED',
+          createdBy: actorId,
+          createdByName: actorName,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        batch.set(expRef, sanitizeFirestore(newExpense));
+      }
+    } else if (existingWageExp) {
+      // Jika status presensi diubah menjadi Izin/Sakit/Alpha (upah = 0), VOID beban gaji lama
+      const expRef = doc(db, 'expenses', existingWageExp.id);
+      batch.update(expRef, sanitizeFirestore({
+        status: 'VOID',
+        voidReason: `Status presensi ${employeeName} diubah menjadi ${status}`,
+        voidedAt: nowIso,
+        voidedBy: actorId,
+        voidedByName: actorName,
+        updatedAt: nowIso,
+      }));
+    }
+
+    // 3. Catat audit log secara atomik
+    const auditRef = doc(collection(db, 'audit_logs'));
+    batch.set(
+      auditRef,
+      sanitizeFirestore({
+        id: auditRef.id,
+        action: 'ATTENDANCE_RECORDED',
+        details: `Presensi [${employeeName}]: ${status} (Upah: Rp ${cleanWage.toLocaleString('id-ID')})`,
+        userUid: actorId,
+        userName: actorName,
+        createdAt: nowIso,
+      })
+    );
+
+    await batch.commit();
   };
 
   const addStaff = async (username: string, name: string, pin: string, role: UserRole) => {
@@ -4493,6 +5177,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
+    // Tahap 8: jika openingCashVariance != 0, buat mutasi PENYESUAIAN agar selisih tercatat
+    const openVariance = shift.openingCashVariance ?? 0;
+    if (openVariance !== 0) {
+      await addCashMutation({
+        account: 'KAS_KASIR',
+        type: 'PENYESUAIAN',
+        amount: Math.abs(openVariance),
+        flow: openVariance > 0 ? 'IN' : 'OUT',
+        title: `Selisih Modal Awal Shift - ${staffName}`,
+        notes: `Selisih modal awal buka shift (${
+          openVariance > 0 ? 'Kelebihan fisik' : 'Kekurangan fisik'
+        } Rp ${Math.abs(openVariance).toLocaleString('id-ID')}. Fisik: Rp ${shift.openingCashActual?.toLocaleString('id-ID')}, Seharusnya: Rp ${shift.openingCashExpected?.toLocaleString('id-ID')})`,
+        referenceId: shiftRef.id,
+      });
+    }
+
     const auditRef = doc(collection(db, 'audit_logs'));
     await setDoc(auditRef, sanitizeFirestore({
       id: auditRef.id,
@@ -4532,14 +5232,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       endIso: closedAt,
     });
 
-    const expectedCash =
-      typeof closingDetails?.expectedCash === 'number'
-        ? closingDetails.expectedCash
-        : metrics.expectedCash;
-    const cashDifference =
-      typeof closingDetails?.cashDifference === 'number'
-        ? closingDetails.cashDifference
-        : actualCash - expectedCash;
+    // Tahap 8: Hitung ulang expectedCash dan cashDifference dari calculateShiftCashMetrics.
+    // Abaikan nilai dari UI (UI hanya boleh mengirim actualCash dan denominasi).
+    const expectedCash = metrics.expectedCash;
+    const cashDifference = actualCash - expectedCash;
 
     const closedShift: Shift = {
       ...shiftDoc,
@@ -4863,6 +5559,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         platformFeeConfigs,
         savePlatformFeeConfig,
         updateProductChannelPricing,
+        taxSettings,
+        updateTaxSettings,
         completeTransaction,
         voidTransaction,
         submitChickenProduction,

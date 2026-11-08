@@ -185,9 +185,16 @@ export interface ProfitLossSnapshot {
   // PENDAPATAN / BEBAN LAIN-LAIN
   otherIncome: number;
   otherExpense: number;
+  shiftSurplusTotal?: number;
+  shiftDeficitTotal?: number;
+  wasteTotalValue?: number;
+  stockAdjustmentLoss?: number;
+  stockAdjustmentGain?: number;
   // LABA SEBELUM PAJAK & PAJAK
   profitBeforeTax: number;
   taxExpense: number;
+  pphFinalExpense?: number;
+  pb1Expense?: number;
   // LABA BERSIH (BERDASARKAN HPP)
   netProfit: number;
   // PEMBELIAN & ARUS KAS OPERASIONAL (REALISASI KAS OPERASIONAL)
@@ -196,7 +203,10 @@ export interface ProfitLossSnapshot {
   actualPurchaseUnpaidDebt: number; // Sisa Hutang PO periode berjalan (tidak dianggap kas keluar)
   cashPurchasePaymentTotal: number; // Total pembayaran pembelian aktual via mutasi kas periode berjalan
   purchasePaymentTotal: number; // Total pembayaran pembelian yang benar-benar keluar kas pada periode berjalan
-  operatingCashFlow: number; // Arus Kas Bersih Operasional = netSales - purchasePaymentTotal - totalSellingExpense - totalOperatingExpense - otherExpense + otherIncome - taxExpense
+  directSalesCashInflow?: number; // Penjualan kasir fisik/tunai/QRIS/bank yang langsung masuk kas
+  platformSettlementTotal?: number; // Settlement dompet platform online yang sudah dicairkan ke bank/kas
+  realSalesCashInflow?: number; // Kas Masuk Riil dari Penjualan (directSalesCashInflow + platformSettlementTotal)
+  operatingCashFlow: number; // Arus Kas Bersih Operasional riil
   // REKONSILIASI LABA DAN ARUS KAS
   reconciliationDifference: number; // operatingCashFlow - netProfit
   // RINGKASAN PERSEDIAAN
@@ -238,6 +248,8 @@ export function useReportData(filters: UseReportFilterParams) {
     productions,
     stockProductions,
     stockMovements,
+    shifts,
+    taxSettings,
   } = useApp();
 
   const {
@@ -690,10 +702,73 @@ export function useReportData(filters: UseReportFilterParams) {
       const totalSellingExpense = totalPlatformFee + otherSellingExpense;
       const operatingProfit =
         grossProfit - totalSellingExpense - totalOperatingExpense;
-      const otherIncome = 0;
-      const otherExpense = 0;
+
+      // Tahap 7: Selisih kas shift dari closeShift (PENYESUAIAN) periode berjalan
+      const closedShiftsInRange = shifts.filter(
+        (s) => s.status === 'CLOSED' && inRange(s.closedAt || s.openedAt)
+      );
+      let shiftSurplusTotal = 0;
+      let shiftDeficitTotal = 0;
+      for (const s of closedShiftsInRange) {
+        const diff = Number(s.cashDifference || 0);
+        if (diff > 0) {
+          shiftSurplusTotal += diff;
+        } else if (diff < 0) {
+          shiftDeficitTotal += Math.abs(diff);
+        }
+      }
+
+      // Tahap 8: Selisih modal awal buka shift (openingCashVariance) periode berjalan
+      const shiftsWithOpeningVarInRange = shifts.filter(
+        (s) => inRange(s.openedAt) && Boolean(s.openingCashVariance)
+      );
+      for (const s of shiftsWithOpeningVarInRange) {
+        const openVar = Number(s.openingCashVariance || 0);
+        if (openVar > 0) {
+          shiftSurplusTotal += openVar;
+        } else if (openVar < 0) {
+          shiftDeficitTotal += Math.abs(openVar);
+        }
+      }
+
+      // Tahap 7: Waste dan selisih opname (dinilai dengan costPerUnit) periode berjalan
+      let wasteTotalValue = 0;
+      let stockAdjustmentLoss = 0;
+      let stockAdjustmentGain = 0;
+
+      for (const m of stockMovements) {
+        if (!inRange(m.createdAt)) continue;
+        const entityId = m.entityId || m.ingredientId || m.productId;
+        const ing = entityId ? ingredientsMap.get(entityId) : undefined;
+        const prod = entityId ? productsMap.get(entityId) : undefined;
+        const unitCost = Math.max(0, Number(ing?.costPerUnit ?? prod?.costPerUnit ?? 0));
+        const chg = Number(m.changeAmount || 0);
+
+        if (m.type === 'WASTE') {
+          wasteTotalValue += Math.abs(chg) * unitCost;
+        } else if (m.type === 'ADJUSTMENT' && !isInitialStockMovement(m)) {
+          if (chg < 0) {
+            stockAdjustmentLoss += Math.abs(chg) * unitCost;
+          } else if (chg > 0) {
+            stockAdjustmentGain += chg * unitCost;
+          }
+        }
+      }
+
+      const otherIncome = Math.round(shiftSurplusTotal + stockAdjustmentGain);
+      const otherExpense = Math.round(shiftDeficitTotal + wasteTotalValue + stockAdjustmentLoss);
       const profitBeforeTax = operatingProfit + otherIncome - otherExpense;
-      const taxExpense = 0;
+
+      // Tahap 7: Pengaturan tarif pajak (PPh final % dan PB1 %) yang dikonfigurasi di Pengaturan
+      const pphFinalExpense =
+        taxSettings?.enablePphFinal && Number(taxSettings?.pphFinalRate) > 0
+          ? Math.round((netSales * Number(taxSettings.pphFinalRate)) / 100)
+          : 0;
+      const pb1Expense =
+        taxSettings?.enablePb1 && Number(taxSettings?.pb1Rate) > 0
+          ? Math.round((netSales * Number(taxSettings.pb1Rate)) / 100)
+          : 0;
+      const taxExpense = pphFinalExpense + pb1Expense;
       const netProfit = profitBeforeTax - taxExpense;
 
       // Actual Purchases (Pembelian Aktual) in range (excluding VOID)
@@ -801,19 +876,30 @@ export function useReportData(filters: UseReportFilterParams) {
       const purchasePaymentTotal =
         cashPurchasePaymentTotal + unmutatedPaidFromRangePurchases;
 
-      // Arus Kas Bersih Operasional (Realisasi Kas Operasional) =
-      // Kas Masuk dari Penjualan (netSales)
+      // Tahap 7: Arus Kas Operasional hanya menghitung kas masuk riil
+      // (penjualan tunai/QRIS/bank + settlement platform yang sudah cair), bukan netSales platform yang belum cair.
+      const directSalesCashInflow = netByChannel['OFFLINE'] || 0;
+      const platformSettlementTotal = cashMutations
+        .filter(
+          (m) =>
+            inRange(m.createdAt, m.date) &&
+            m.type === 'PENCAIRAN_PLATFORM' &&
+            m.flow === 'IN'
+        )
+        .reduce((sum, m) => sum + (m.amount || 0), 0);
+
+      const realSalesCashInflow = directSalesCashInflow + platformSettlementTotal;
+
+      // Arus Kas Bersih Operasional =
+      // Kas Masuk Riil dari Penjualan (realSalesCashInflow)
       // - Pembayaran Pembelian (purchasePaymentTotal)
-      // - Biaya Admin / Platform (totalSellingExpense)
       // - Pengeluaran Operasional Aktual (totalOperatingExpense)
       // - Beban Lain-lain Aktual (otherExpense)
       // + Pendapatan Lain (otherIncome)
       // - Pajak (taxExpense)
-      // PENTING: Arus Kas Operasional berbeda dengan Laba Bersih dan tidak menggunakan HPP.
       const operatingCashFlow =
-        netSales -
+        realSalesCashInflow -
         purchasePaymentTotal -
-        totalSellingExpense -
         totalOperatingExpense +
         otherIncome -
         otherExpense -
@@ -955,6 +1041,16 @@ export function useReportData(filters: UseReportFilterParams) {
         actualPurchaseUnpaidDebt,
         cashPurchasePaymentTotal,
         purchasePaymentTotal,
+        directSalesCashInflow,
+        platformSettlementTotal,
+        realSalesCashInflow,
+        shiftSurplusTotal,
+        shiftDeficitTotal,
+        wasteTotalValue,
+        stockAdjustmentLoss,
+        stockAdjustmentGain,
+        pphFinalExpense,
+        pb1Expense,
         operatingCashFlow,
         reconciliationDifference,
         inventorySummary,
@@ -973,6 +1069,8 @@ export function useReportData(filters: UseReportFilterParams) {
     ingredients,
     products,
     stockMovements,
+    shifts,
+    taxSettings,
     channelFilter,
     resolveSoldItemUnitHpp,
   ]);
@@ -2295,7 +2393,11 @@ export function useReportData(filters: UseReportFilterParams) {
 
       // Table 2: REALISASI KAS OPERASIONAL (ARUS KAS OPERASIONAL)
       const arusKasOperasionalRows: Array<Array<string | number>> = [
-        makeRow('Kas Masuk dari Penjualan (Penjualan Bersih)', pl.netSales, comp?.netSales),
+        makeRow(
+          'Kas Masuk Riil dari Penjualan (Tunai/QRIS/Bank + Settlement)',
+          pl.realSalesCashInflow ?? pl.netSales,
+          comp ? (comp.realSalesCashInflow ?? comp.netSales) : undefined
+        ),
         makeRow(
           `Pembayaran Pembelian (PO Periode: ${formatRupiah(pl.actualPurchaseTotal)} | Dibayar: ${formatRupiah(pl.purchasePaymentTotal)} | Hutang PO: ${formatRupiah(pl.actualPurchaseUnpaidDebt)})`,
           pl.purchasePaymentTotal,

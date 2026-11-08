@@ -346,16 +346,7 @@ export interface Purchase {
   createdByName?: string;
   createdAt: string;
   updatedAt?: string;
-
-  // Offline-First Sync Metadata
-  isOfflineSync?: boolean;
-  syncStatus?: 'SYNCHRONIZED' | 'PENDING' | 'SYNCING' | 'ERROR';
-  offlineSyncError?: string;
-  offlineCreatedAt?: string;
-  syncedAt?: string;
 }
-
-export type PurchaseSyncStatus = 'SYNCHRONIZED' | 'PENDING' | 'SYNCING' | 'ERROR';
 
 export type OrderType = 'OFFLINE' | 'GOFOOD' | 'GRABFOOD' | 'SHOPEEFOOD';
 

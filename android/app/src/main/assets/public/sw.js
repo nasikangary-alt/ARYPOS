@@ -87,7 +87,7 @@ define(['./workbox-43e44e5a'], (function (workbox) { 'use strict';
     "revision": "c18cb4360b89f16adefa4d93ddd49aec"
   }, {
     "url": "index.html",
-    "revision": "1dae36378e6a0f6a0b1cddae756c4b21"
+    "revision": "987b73445a0ef6e09872faaf3952f26c"
   }, {
     "url": "icon.svg",
     "revision": "b9e9d2e5be0ef49a83ebb7f054962762"
@@ -119,19 +119,19 @@ define(['./workbox-43e44e5a'], (function (workbox) { 'use strict';
     "url": "assets/jspdf.plugin.autotable-BrAqd2M3.js",
     "revision": null
   }, {
-    "url": "assets/jspdf.es.min-C-PRLyu0.js",
+    "url": "assets/jspdf.es.min-G0ANVJ_o.js",
     "revision": null
   }, {
-    "url": "assets/index.es-iv-9IXoH.js",
+    "url": "assets/index.es-wnPmozDS.js",
     "revision": null
   }, {
-    "url": "assets/index-C12hnudV.css",
+    "url": "assets/index-xSkFKJ-7.js",
     "revision": null
   }, {
-    "url": "assets/index-C0pn_7tK.js",
+    "url": "assets/index-CMSJlyhz.css",
     "revision": null
   }, {
-    "url": "assets/html2canvas-D69PE284.js",
+    "url": "assets/html2canvas-B-Q6qQfE.js",
     "revision": null
   }, {
     "url": "apple-touch-icon.png",

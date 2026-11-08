@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { formatRupiah, formatDate, formatNumber } from '../../utils/formatters';
 import { PageHeader } from '../common/PageHeader';
 import { SummaryBar } from '../common/SummaryBar';
-import { PurchaseStatusBadge, PurchaseSyncBadge } from './PurchaseStatusBadge';
+import { PurchaseStatusBadge } from './PurchaseStatusBadge';
 import { QuickDrawerPurchaseModal } from './QuickDrawerPurchaseModal';
 import {
   Plus,
@@ -24,9 +24,6 @@ import {
   CreditCard,
   FileText,
   Zap,
-  RefreshCw,
-  Wifi,
-  WifiOff,
 } from 'lucide-react';
 
 interface PurchaseListProps {
@@ -42,21 +39,14 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({
   onEditPurchase,
   isDesktopWide = false,
 }) => {
-  const {
-    purchases,
-    vendors,
-    offlinePendingPurchasesCount,
-    isSyncingPurchases,
-    triggerManualSync,
-    isOnline,
-  } = useApp();
+  const { purchases, vendors } = useApp();
   const { currentRole } = useAuth();
 
   const [showQuickPurchaseModal, setShowQuickPurchaseModal] = useState(false);
 
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'SEMUA' | PaymentStatus | 'OFFLINE_PENDING'>('SEMUA');
+  const [statusFilter, setStatusFilter] = useState<'SEMUA' | PaymentStatus>('SEMUA');
   const [dateRangeFilter, setDateRangeFilter] = useState<
     'HARI_INI' | 'MINGGU_INI' | 'BULAN_INI' | 'SEMUA'
   >('BULAN_INI');
@@ -69,14 +59,8 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({
 
     return purchases.filter(p => {
       // 1. Status Filter
-      if (statusFilter === 'OFFLINE_PENDING') {
-        if (!p.isOfflineSync && p.syncStatus !== 'PENDING' && p.syncStatus !== 'ERROR' && p.syncStatus !== 'SYNCING') {
-          return false;
-        }
-      } else if (statusFilter !== 'SEMUA') {
-        const pStatus =
-          p.paymentStatus ||
-          (p.paidAmount >= p.totalAmount ? 'LUNAS' : p.paidAmount > 0 ? 'SEBAGIAN' : 'BELUM_DIBAYAR');
+      if (statusFilter !== 'SEMUA') {
+        const pStatus = p.paymentStatus || (p.paidAmount >= p.totalAmount ? 'LUNAS' : p.paidAmount > 0 ? 'SEBAGIAN' : 'BELUM_DIBAYAR');
         if (pStatus !== statusFilter) return false;
       }
 
@@ -144,11 +128,7 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({
     );
     const sudahDibayar = thisMonthPurchases.reduce((acc, p) => acc + (p.paidAmount || 0), 0);
     const totalHutang = activePurchases.reduce(
-      (acc, p) =>
-        acc +
-        (p.remainingAmount !== undefined
-          ? p.remainingAmount
-          : Math.max(0, p.totalAmount - p.paidAmount)),
+      (acc, p) => acc + (p.remainingAmount !== undefined ? p.remainingAmount : Math.max(0, p.totalAmount - p.paidAmount)),
       0
     );
     const totalTransaksi = thisMonthPurchases.length;
@@ -166,7 +146,7 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({
       {/* Global PageHeader */}
       <PageHeader
         title="Pembelian"
-        description="Kelola transaksi pembelian bahan baku, kemasan, supplier, dan sinkronisasi stok."
+        description="Kelola transaksi pembelian bahan, supplier, tagihan dan pembayaran."
         actions={
           <div className="flex items-center gap-2">
             <button
@@ -188,41 +168,6 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({
           </div>
         }
       />
-
-      {/* OFFLINE PENDING PURCHASES ALERT BANNER */}
-      {offlinePendingPurchasesCount > 0 && (
-        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
-              <Clock className="w-5 h-5 stroke-[2.5]" />
-            </div>
-            <div>
-              <p className="text-xs font-black text-[#172033] flex items-center gap-2">
-                <span>{offlinePendingPurchasesCount} Transaksi Pembelian Menunggu Sinkronisasi</span>
-                {!isOnline && (
-                  <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold flex items-center gap-1">
-                    <WifiOff className="w-3 h-3" /> Offline
-                  </span>
-                )}
-              </p>
-              <p className="text-[11px] font-semibold text-[#667085] mt-0.5">
-                {isOnline
-                  ? 'Koneksi internet aktif. Klik Sinkronkan Sekarang untuk mengirim data ke cloud database.'
-                  : 'Stok lokal di IndexedDB telah bertambah otomatis & data tersimpan aman tanpa koneksi internet.'}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={triggerManualSync}
-            disabled={!isOnline || isSyncingPurchases}
-            className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:bg-[#CBD5E1] text-white text-xs font-extrabold flex items-center gap-2 transition cursor-pointer shadow-xs shrink-0 self-end sm:self-center"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingPurchases ? 'animate-spin' : ''}`} />
-            <span>{isSyncingPurchases ? 'Sedang Sinkron...' : 'Sinkronkan Sekarang'}</span>
-          </button>
-        </div>
-      )}
 
       {/* Summary Bar */}
       <SummaryBar
@@ -311,14 +256,6 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({
             { id: 'BELUM_DIBAYAR', label: 'Belum Dibayar' },
             { id: 'SEBAGIAN', label: 'Dibayar Sebagian' },
             { id: 'LUNAS', label: 'Lunas' },
-            ...(offlinePendingPurchasesCount > 0
-              ? [
-                  {
-                    id: 'OFFLINE_PENDING',
-                    label: `⏳ Tertunda Offline (${offlinePendingPurchasesCount})`,
-                  },
-                ]
-              : []),
           ].map(tab => {
             const isActive = statusFilter === tab.id;
             return (
@@ -373,8 +310,7 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({
                     <th className="p-3.5 text-right">Total</th>
                     <th className="p-3.5 text-right">Dibayar</th>
                     <th className="p-3.5 text-right">Sisa</th>
-                    <th className="p-3.5 text-center">Status Pembayaran</th>
-                    <th className="p-3.5 text-center">Status Sinkronisasi</th>
+                    <th className="p-3.5 text-center">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E8ECF2] bg-white">
@@ -394,15 +330,7 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({
                       >
                         {/* Nomor */}
                         <td className="p-3.5 font-extrabold text-[#172033] group-hover:text-[#FF641F] transition">
-                          <div className="flex items-center gap-1.5">
-                            <span>{p.purchaseNo || `#${p.id.slice(-6)}`}</span>
-                            {p.isOfflineSync && (
-                              <span
-                                className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"
-                                title="Offline Pending"
-                              />
-                            )}
-                          </div>
+                          {p.purchaseNo || `#${p.id.slice(-6)}`}
                         </td>
 
                         {/* Vendor */}
@@ -448,18 +376,9 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({
                           {formatRupiah(remaining)}
                         </td>
 
-                        {/* Status Pembayaran */}
+                        {/* Status Badge */}
                         <td className="p-3.5 text-center">
                           <PurchaseStatusBadge status={p.paymentStatus} size="sm" />
-                        </td>
-
-                        {/* Status Sinkronisasi */}
-                        <td className="p-3.5 text-center">
-                          <PurchaseSyncBadge
-                            isOfflineSync={p.isOfflineSync}
-                            syncStatus={p.syncStatus}
-                            size="sm"
-                          />
                         </td>
                       </tr>
                     );
@@ -484,11 +403,9 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-black text-[#172033]">
-                            {p.purchaseNo || `#${p.id.slice(-6)}`}
-                          </span>
-                        </div>
+                        <span className="text-xs font-black text-[#172033]">
+                          {p.purchaseNo || `#${p.id.slice(-6)}`}
+                        </span>
                         <p className="text-xs font-bold text-[#172033] mt-0.5">
                           {p.vendorName || p.supplier}
                         </p>
@@ -496,16 +413,7 @@ export const PurchaseList: React.FC<PurchaseListProps> = ({
                           {formatDate(p.date)} &bull; {p.items?.length || 1} jenis barang
                         </p>
                       </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <PurchaseStatusBadge status={p.paymentStatus} size="sm" />
-                        {p.isOfflineSync && (
-                          <PurchaseSyncBadge
-                            isOfflineSync={p.isOfflineSync}
-                            syncStatus={p.syncStatus}
-                            size="sm"
-                          />
-                        )}
-                      </div>
+                      <PurchaseStatusBadge status={p.paymentStatus} size="sm" />
                     </div>
 
                     <div className="flex items-end justify-between pt-2 border-t border-[#E8ECF2] text-xs">

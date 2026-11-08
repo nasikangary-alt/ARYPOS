@@ -1,7 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Purchase, PurchaseItem, Vendor } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { isProductionOutputProduct } from '../../services/stockEngine';
 import {
   formatRupiah,
   formatNumber,
@@ -62,6 +64,7 @@ export const PurchaseForm: React.FC<PurchaseFormProps> = ({
     vendors,
     ingredients,
     products,
+    recipes,
     createPurchase,
     updatePurchase,
     addVendor,
@@ -160,6 +163,9 @@ export const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
     products.forEach(p => {
       if (!p.id || seenIds.has(p.id)) return;
+      // Jangan masukkan produk hasil olahan resep (seperti Ayam Geprek / Teh Manis) ke daftar belanja bahan
+      if (isProductionOutputProduct(p, recipes)) return;
+
       const isReadyToSell =
         p.stockSource === 'READY_TO_SELL' ||
         (p.productType !== 'PACKAGE' && !p.isProduction && !p.recipeId);
@@ -247,11 +253,36 @@ export const PurchaseForm: React.FC<PurchaseFormProps> = ({
     ];
   });
 
-  // Active Dropdown state per row
+  // Active Dropdown state per row with Portal fixed coordinates
   const [activePickerRowIndex, setActivePickerRowIndex] = useState<number | null>(null);
   const [pickerSearchQuery, setPickerSearchQuery] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [dropdownPos, setDropdownPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+
+  const updateDropdownPos = useCallback(() => {
+    if (activePickerRowIndex === null) {
+      setDropdownPos(null);
+      return;
+    }
+    const el = inputRefs.current[activePickerRowIndex];
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const dropdownHeight = 240;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUpward = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
+
+    setDropdownPos({
+      top: openUpward ? rect.top - dropdownHeight - 4 : rect.bottom + 4,
+      left: rect.left,
+      width: Math.max(rect.width, 320),
+    });
+  }, [activePickerRowIndex]);
 
   // Auto-generate purchase number if empty and creating
   useEffect(() => {
@@ -262,20 +293,40 @@ export const PurchaseForm: React.FC<PurchaseFormProps> = ({
     }
   }, [date, isEditMode, purchaseNo]);
 
-  // Click outside to close active product combobox
+  // Click outside and scroll listener for portal dropdown
   useEffect(() => {
-    if (activePickerRowIndex === null) return;
+    if (activePickerRowIndex === null) {
+      setDropdownPos(null);
+      return;
+    }
+    updateDropdownPos();
+
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('.product-combobox-container')) {
+      if (
+        !target.closest('.product-combobox-container') &&
+        !target.closest('.product-combobox-dropdown')
+      ) {
         setActivePickerRowIndex(null);
       }
     };
+
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('.product-combobox-dropdown')) return;
+      updateDropdownPos();
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', updateDropdownPos);
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', updateDropdownPos);
     };
-  }, [activePickerRowIndex]);
+  }, [activePickerRowIndex, updateDropdownPos]);
 
   // Filter items in dropdown
   const filteredPickerItems = useMemo(() => {
@@ -784,7 +835,7 @@ export const PurchaseForm: React.FC<PurchaseFormProps> = ({
           </div>
 
           {/* Desktop Table */}
-          <div className="overflow-x-auto overflow-y-visible border border-[#E8ECF2] rounded-xl pb-32">
+          <div className="overflow-x-auto border border-[#E8ECF2] rounded-xl">
             <table className="w-full text-left text-xs border-collapse min-w-[920px]">
               <thead>
                 <tr className="bg-[#F8FAFC] border-b border-[#E8ECF2] text-[#667085] font-bold text-[11px] uppercase tracking-wider">
@@ -806,13 +857,15 @@ export const PurchaseForm: React.FC<PurchaseFormProps> = ({
                     <tr
                       key={row.keyId}
                       className="hover:bg-slate-50/40 transition"
-                      style={{ position: 'relative', zIndex: isRowActive ? 40 : rows.length - index }}
                     >
                       {/* Produk Inline Attached Combobox */}
-                      <td className="p-2.5 relative">
+                      <td className="p-2.5">
                         <div className="relative product-combobox-container">
                           <div className="relative flex items-center">
                             <input
+                              ref={el => {
+                                inputRefs.current[index] = el;
+                              }}
                               type="text"
                               placeholder="Pilih Produk"
                               value={
@@ -834,46 +887,6 @@ export const PurchaseForm: React.FC<PurchaseFormProps> = ({
                             />
                             <Search className="w-3.5 h-3.5 text-[#98A2B3] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                           </div>
-
-                          {/* Attached Dropdown Menu (Directly Below the Input) */}
-                          {isRowActive && (
-                            <div
-                              className="absolute left-0 top-full mt-1 w-full min-w-[280px] bg-white rounded-xl border border-[#E8ECF2] shadow-xl py-1 z-50 max-h-60 overflow-y-auto"
-                              onMouseDown={e => e.preventDefault()}
-                            >
-                              {filteredPickerItems.length === 0 ? (
-                                <div className="px-3 py-3 text-xs text-[#667085] text-center">
-                                  Produk &quot;{pickerSearchQuery}&quot; tidak ditemukan.
-                                </div>
-                              ) : (
-                                filteredPickerItems.map(item => {
-                                  const isSelected = item.id === row.targetId;
-                                  return (
-                                    <button
-                                      key={item.id}
-                                      type="button"
-                                      onClick={() => handleSelectProduct(index, item)}
-                                      className={`w-full px-3 py-2 text-left text-xs flex items-center justify-between gap-2 hover:bg-[#F2F4F7] transition cursor-pointer ${
-                                        isSelected
-                                          ? 'bg-[#F8F9FC] font-bold text-[#FF641F]'
-                                          : 'text-[#172033]'
-                                      }`}
-                                    >
-                                      <div className="truncate">
-                                        <span className="font-semibold">{item.name}</span>
-                                        <span className="text-[10px] text-[#667085] ml-1.5 font-normal">
-                                          ({item.unit})
-                                        </span>
-                                      </div>
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F2F4F7] text-[#475467] shrink-0 font-medium">
-                                        Stok: {formatNumber(item.stock)}
-                                      </span>
-                                    </button>
-                                  );
-                                })
-                              )}
-                            </div>
-                          )}
                         </div>
                       </td>
 
@@ -1017,7 +1030,7 @@ export const PurchaseForm: React.FC<PurchaseFormProps> = ({
               className="px-4 py-2 rounded-xl border border-[#E8ECF2] bg-white hover:bg-[#F8FAFC] hover:border-[#172033]/30 text-xs font-bold text-[#172033] flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
             >
               <Plus className="w-4 h-4 text-[#667085]" />
-              <span>+ Tambah baris</span>
+              <span>Tambah baris</span>
             </button>
           </div>
         </div>
@@ -1275,6 +1288,55 @@ export const PurchaseForm: React.FC<PurchaseFormProps> = ({
             </div>
           </form>
         </div>
+      )}
+
+      {/* PORTAL-BASED PRODUCT COMBOBOX DROPDOWN (Fixed Coordinates, Never Clipped, Never Scrolls Table Container) */}
+      {activePickerRowIndex !== null && dropdownPos && createPortal(
+        <div
+          className="product-combobox-dropdown fixed bg-white rounded-xl border border-[#E8ECF2] shadow-2xl py-1 z-[9999] max-h-60 overflow-y-auto"
+          style={{
+            top: `${dropdownPos.top}px`,
+            left: `${dropdownPos.left}px`,
+            width: `${dropdownPos.width}px`,
+          }}
+          onMouseDown={e => e.preventDefault()}
+        >
+          {filteredPickerItems.length === 0 ? (
+            <div className="px-3 py-3 text-xs text-[#667085] text-center">
+              Produk &quot;{pickerSearchQuery}&quot; tidak ditemukan.
+            </div>
+          ) : (
+            filteredPickerItems.map(item => {
+              const isSelected = item.id === rows[activePickerRowIndex]?.targetId;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    handleSelectProduct(activePickerRowIndex, item);
+                    setActivePickerRowIndex(null);
+                  }}
+                  className={`w-full px-3 py-2 text-left text-xs flex items-center justify-between gap-2 hover:bg-[#F2F4F7] transition cursor-pointer ${
+                    isSelected
+                      ? 'bg-[#F8F9FC] font-bold text-[#FF641F]'
+                      : 'text-[#172033]'
+                  }`}
+                >
+                  <div className="truncate">
+                    <span className="font-semibold">{item.name}</span>
+                    <span className="text-[10px] text-[#667085] ml-1.5 font-normal">
+                      ({item.unit})
+                    </span>
+                  </div>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F2F4F7] text-[#475467] shrink-0 font-medium">
+                    Stok: {formatNumber(item.stock)}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>,
+        document.body
       )}
     </div>
   );

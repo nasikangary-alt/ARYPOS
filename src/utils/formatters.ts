@@ -1,13 +1,15 @@
 import { Recipe, Ingredient, Product, Assembly } from '../types';
 
-export function formatNumber(value: number | string | undefined | null): string {
+export function formatNumber(value: number | string | undefined | null, maxDecimals = 2): string {
   if (value === undefined || value === null || value === '') return '0';
   const num = Number(value);
   if (isNaN(num)) return '0';
 
-  const parts = num.toString().split('.');
+  // Round to maxDecimals to avoid IEEE floating-point precision artifacts (e.g. 599.9058 -> 599.91)
+  const rounded = Number(num.toFixed(maxDecimals));
+  const parts = rounded.toString().split('.');
   const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  if (parts.length > 1) {
+  if (parts.length > 1 && parts[1]) {
     return `${integerPart},${parts[1]}`;
   }
   return integerPart;

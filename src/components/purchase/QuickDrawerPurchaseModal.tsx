@@ -7,6 +7,7 @@ import {
   formatNumberInput,
   parseNumberInput,
 } from '../../utils/formatters';
+import { isProductionOutputProduct } from '../../services/stockEngine';
 import {
   ShoppingBag,
   X,
@@ -40,7 +41,7 @@ export const QuickDrawerPurchaseModal: React.FC<QuickDrawerPurchaseModalProps> =
   isOpen,
   onClose,
 }) => {
-  const { ingredients, products, cashMutations, createPurchase } = useApp();
+  const { ingredients, products, recipes, cashMutations, createPurchase } = useApp();
   const { currentEmployee } = useAuth();
 
   const [itemName, setItemName] = useState('');
@@ -94,6 +95,9 @@ export const QuickDrawerPurchaseModal: React.FC<QuickDrawerPurchaseModalProps> =
 
     products.forEach((prod) => {
       if (!prod.id || seenIds.has(prod.id)) return;
+      // Jangan masukkan produk hasil olahan resep (seperti Ayam Geprek / Teh Manis) ke daftar belanja bahan
+      if (isProductionOutputProduct(prod, recipes)) return;
+
       const isReadyToSell =
         prod.stockSource === 'READY_TO_SELL' ||
         (prod.productType !== 'PACKAGE' && !prod.isProduction && !prod.recipeId);

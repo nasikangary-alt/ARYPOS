@@ -1,6 +1,6 @@
 import React from 'react';
 import { PaymentStatus } from '../../types';
-import { CheckCircle2, Clock, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle, XCircle } from 'lucide-react';
 
 interface PurchaseStatusBadgeProps {
   status: PaymentStatus | string;
@@ -59,66 +59,6 @@ export const PurchaseStatusBadge: React.FC<PurchaseStatusBadgeProps> = ({
     >
       <AlertTriangle className="w-3.5 h-3.5 shrink-0 stroke-[2.5]" />
       <span>Belum Dibayar</span>
-    </span>
-  );
-};
-
-export interface PurchaseSyncBadgeProps {
-  isOfflineSync?: boolean;
-  syncStatus?: 'SYNCHRONIZED' | 'PENDING' | 'SYNCING' | 'ERROR' | string;
-  size?: 'sm' | 'md' | 'lg';
-}
-
-export const PurchaseSyncBadge: React.FC<PurchaseSyncBadgeProps> = ({
-  isOfflineSync,
-  syncStatus,
-  size = 'md',
-}) => {
-  const sizeClasses = {
-    sm: 'px-2 py-0.5 text-[10px] gap-1',
-    md: 'px-2.5 py-1 text-[11px] gap-1.5',
-    lg: 'px-3 py-1.5 text-xs gap-2',
-  }[size];
-
-  if (syncStatus === 'SYNCING') {
-    return (
-      <span
-        className={`inline-flex items-center rounded-full font-bold bg-[#EFF8FF] text-[#175CD3] border border-[#B2DDFF] animate-pulse ${sizeClasses}`}
-      >
-        <RefreshCw className="w-3.5 h-3.5 shrink-0 stroke-[2.5] animate-spin" />
-        <span>↻ Sedang Sinkronisasi</span>
-      </span>
-    );
-  }
-
-  if (syncStatus === 'ERROR') {
-    return (
-      <span
-        className={`inline-flex items-center rounded-full font-bold bg-[#FEF3F2] text-[#D92D20] border border-[#FECDCA] ${sizeClasses}`}
-      >
-        <AlertTriangle className="w-3.5 h-3.5 shrink-0 stroke-[2.5]" />
-        <span>⚠ Gagal Sinkronisasi</span>
-      </span>
-    );
-  }
-
-  if (isOfflineSync || syncStatus === 'PENDING') {
-    return (
-      <span
-        className={`inline-flex items-center rounded-full font-bold bg-[#FFFAEB] text-[#B54708] border border-[#FEDF89] ${sizeClasses}`}
-      >
-        <Clock className="w-3.5 h-3.5 shrink-0 stroke-[2.5]" />
-        <span>⏳ Menunggu Sinkronisasi</span>
-      </span>
-    );
-  }
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full font-bold bg-[#ECFDF3] text-[#027A48] border border-[#A6F4C5]/60 ${sizeClasses}`}
-    >
-      <CheckCircle2 className="w-3.5 h-3.5 shrink-0 stroke-[2.5]" />
-      <span>✓ Tersinkron</span>
     </span>
   );
 };

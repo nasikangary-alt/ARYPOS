@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, writeBatch, query, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { handleFirestoreError, OperationType } from '../firebase/errorHandler';
@@ -86,32 +86,9 @@ import {
   getOfflineSales,
   saveOfflineSale,
   removeOfflineSale,
-  getOfflinePurchases,
-  getOfflinePurchasesAsync,
-  saveOfflinePurchase,
-  removeOfflinePurchase,
-  syncOfflinePurchasesToFirestore,
-  getPendingOfflineStockAdditions,
   getSyncState,
   SyncState,
 } from '../services/offlineSync';
-import {
-  getCachedIngredients,
-  saveCachedIngredients,
-  getCachedProducts,
-  saveCachedProducts,
-  getCachedVendors,
-  saveCachedVendors,
-  getCachedPurchases,
-  saveCachedPurchases,
-  saveCachedPurchase,
-  getCachedStockMovements,
-  saveCachedStockMovements,
-  getCachedCashMutations,
-  saveCachedCashMutations,
-  getCachedSales,
-  saveCachedSales,
-} from '../services/offlineDatabase';
 
 interface AppContextType {
   categories: Category[];
@@ -425,10 +402,6 @@ interface AppContextType {
   isSeeding: boolean;
   syncState: SyncState;
   isOnline: boolean;
-  offlinePendingSalesCount: number;
-  offlinePendingPurchasesCount: number;
-  isSyncingPurchases: boolean;
-  triggerManualSync: () => Promise<void>;
   
   // Dark mode
   darkMode: boolean;
@@ -488,72 +461,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedOrderType, setSelectedOrderTypeState] = useState<OrderType>('OFFLINE');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSeeding, setIsSeeding] = useState(false);
-  const [offlinePendingSalesCount, setOfflinePendingSalesCount] = useState(0);
-  const [offlinePendingPurchasesCount, setOfflinePendingPurchasesCount] = useState(0);
-  const [isSyncingPurchases, setIsSyncingPurchases] = useState(false);
-  const offlinePendingCount = offlinePendingSalesCount + offlinePendingPurchasesCount;
-
-  // Hydrate from Local Offline Database (IndexedDB) immediately on mount
-  useEffect(() => {
-    let isMounted = true;
-    const hydrateLocalDb = async () => {
-      try {
-        const [
-          cachedIngs,
-          cachedProds,
-          cachedVends,
-          cachedPurch,
-          cachedMoves,
-          cachedCash,
-          cachedSalesData,
-        ] = await Promise.all([
-          getCachedIngredients(),
-          getCachedProducts(),
-          getCachedVendors(),
-          getCachedPurchases(),
-          getCachedStockMovements(),
-          getCachedCashMutations(),
-          getCachedSales(),
-        ]);
-
-        if (!isMounted) return;
-
-        if (cachedIngs && cachedIngs.length > 0) {
-          setIngredients(prev => (prev.length === 0 ? cachedIngs : prev));
-        }
-        if (cachedProds && cachedProds.length > 0) {
-          setProducts(prev => (prev.length === 0 ? cachedProds : prev));
-        }
-        if (cachedVends && cachedVends.length > 0) {
-          setVendors(prev => (prev.length === 0 ? cachedVends : prev));
-        }
-        if (cachedPurch && cachedPurch.length > 0) {
-          setPurchases(prev => (prev.length === 0 ? deduplicate(cachedPurch) : prev));
-        }
-        if (cachedMoves && cachedMoves.length > 0) {
-          setStockMovements(prev => (prev.length === 0 ? deduplicate(cachedMoves) : prev));
-        }
-        if (cachedCash && cachedCash.length > 0) {
-          setCashMutations(prev => (prev.length === 0 ? deduplicate(cachedCash) : prev));
-        }
-        if (cachedSalesData && cachedSalesData.length > 0) {
-          setSales(prev => (prev.length === 0 ? deduplicate(cachedSalesData) : prev));
-        }
-
-        const offPurchases = await getOfflinePurchasesAsync();
-        const offSales = getOfflineSales();
-        setOfflinePendingPurchasesCount(offPurchases.length);
-        setOfflinePendingSalesCount(offSales.length);
-      } catch (err) {
-        console.warn('Initial IndexedDB hydration note:', err);
-      }
-    };
-
-    hydrateLocalDb();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const [offlinePendingCount, setOfflinePendingCount] = useState(0);
 
   // Platform Fee Settings State (Separate per platform, flexible and customizable)
   const [platformFeeSettings, setPlatformFeeSettings] = useState<PlatformFeeSettingsRecord>(() => {
@@ -837,43 +745,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }, err => handleFirestoreError(err, OperationType.GET, 'ingredient_categories'));
 
-    const unsubIng = onSnapshot(collection(db, 'ingredients'), async snap => {
+    const unsubIng = onSnapshot(collection(db, 'ingredients'), snap => {
       if (!snap.empty) {
         const list = snap.docs.map(doc => ({ ...(doc.data() as Ingredient), id: (doc.data() as Ingredient).id || doc.id }));
-        const { ingredientAdditions, pendingPurchasesMap } = await getPendingOfflineStockAdditions();
-        const mergedList = list.map(ing => {
-          const pendingAdd = ingredientAdditions.get(ing.id) || 0;
-          let costPerUnit = ing.costPerUnit;
-          let purchasePrice = ing.purchasePrice;
-
-          for (const p of pendingPurchasesMap.values()) {
-            const item = (p.items || []).find(it => it.targetId === ing.id && it.entityType !== 'PRODUCT');
-            if (item) {
-              if (item.costPerUnit > 0) purchasePrice = item.costPerUnit;
-              if (item.costPerStockUnit && item.costPerStockUnit > 0) costPerUnit = item.costPerStockUnit;
-            }
-          }
-
-          if (pendingAdd > 0 || (purchasePrice !== undefined && purchasePrice !== ing.purchasePrice) || (costPerUnit !== undefined && costPerUnit !== ing.costPerUnit)) {
-            return {
-              ...ing,
-              stock: ing.stock + pendingAdd,
-              purchasePrice: purchasePrice ?? ing.purchasePrice,
-              costPerUnit: costPerUnit ?? ing.costPerUnit,
-            };
-          }
-          return ing;
-        });
-
-        const dedupIngs = deduplicate(mergedList);
-        setIngredients(dedupIngs);
-        saveCachedIngredients(dedupIngs).catch(() => {});
-      } else if (isOnline) {
+        setIngredients(deduplicate(list));
+      } else {
         setIngredients([]);
       }
     }, err => handleFirestoreError(err, OperationType.GET, 'ingredients'));
 
-    const unsubProd = onSnapshot(collection(db, 'products'), async snap => {
+    const unsubProd = onSnapshot(collection(db, 'products'), snap => {
       if (!snap.empty) {
         const defaultProdById = new Map<string, Product>(
           DEFAULT_PRODUCTS.map(dp => [dp.id, dp])
@@ -1009,36 +890,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             packageItems,
           };
         });
-
-        const { productAdditions, pendingPurchasesMap } = await getPendingOfflineStockAdditions();
-        const mergedProducts = normalized.map(prod => {
-          const pendingAdd = productAdditions.get(prod.id) || 0;
-          let costPerUnit = prod.costPerUnit;
-          let purchasePrice = prod.purchasePrice;
-
-          for (const p of pendingPurchasesMap.values()) {
-            const item = (p.items || []).find(it => it.targetId === prod.id && it.entityType === 'PRODUCT');
-            if (item) {
-              if (item.costPerUnit > 0) purchasePrice = item.costPerUnit;
-              if (item.costPerStockUnit && item.costPerStockUnit > 0) costPerUnit = item.costPerStockUnit;
-            }
-          }
-
-          if (pendingAdd > 0 || (purchasePrice !== undefined && purchasePrice !== prod.purchasePrice) || (costPerUnit !== undefined && costPerUnit !== prod.costPerUnit)) {
-            return {
-              ...prod,
-              stock: (prod.stock || 0) + pendingAdd,
-              purchasePrice: purchasePrice ?? prod.purchasePrice,
-              costPerUnit: costPerUnit ?? prod.costPerUnit,
-            };
-          }
-          return prod;
-        });
-
-        const dedupProds = deduplicate(mergedProducts);
-        setProducts(dedupProds);
-        saveCachedProducts(dedupProds).catch(() => {});
-      } else if (isOnline) {
+        setProducts(deduplicate(normalized));
+      } else {
         setProducts([]);
       }
     }, err => handleFirestoreError(err, OperationType.GET, 'products'));
@@ -1129,10 +982,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, err => handleFirestoreError(err, OperationType.GET, 'productions'));
 
     const qPurch = query(collection(db, 'purchases'), orderBy('createdAt', 'desc'));
-    const unsubPurch = onSnapshot(qPurch, async snap => {
-      let list: Purchase[] = [];
+    const unsubPurch = onSnapshot(qPurch, snap => {
       if (!snap.empty) {
-        list = snap.docs.map(doc => {
+        const list = snap.docs.map(doc => {
           const p = doc.data() as any;
           const id = p.id || doc.id;
           const totalAmount = p.totalAmount ?? p.totalCost ?? ((p.quantity || 1) * (p.costPerUnit || 0));
@@ -1173,26 +1025,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             payments: p.payments || [],
           } as Purchase;
         });
+        setPurchases(deduplicate(list));
+      } else {
+        setPurchases([]);
       }
-
-      const { pendingPurchasesMap } = await getPendingOfflineStockAdditions();
-      const combinedMap = new Map<string, Purchase>();
-      list.forEach(p => combinedMap.set(p.id, p));
-      pendingPurchasesMap.forEach((pendingP, id) => {
-        combinedMap.set(id, pendingP);
-      });
-      const dedupPurchases = deduplicate(Array.from(combinedMap.values()));
-      setPurchases(dedupPurchases);
-      saveCachedPurchases(dedupPurchases).catch(() => {});
     }, err => handleFirestoreError(err, OperationType.GET, 'purchases'));
 
     const qVendors = query(collection(db, 'vendors'), orderBy('createdAt', 'desc'));
     const unsubVendors = onSnapshot(qVendors, snap => {
       if (!snap.empty) {
         const list = snap.docs.map(doc => ({ ...(doc.data() as Vendor), id: (doc.data() as Vendor).id || doc.id }));
-        const dedupVendors = deduplicate(list);
-        setVendors(dedupVendors);
-        saveCachedVendors(dedupVendors).catch(() => {});
+        setVendors(deduplicate(list));
       } else {
         setVendors([]);
       }
@@ -1344,19 +1187,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
 
 
-  // Manual and Automatic Sync Trigger for Offline Sales & Purchases
-  const triggerManualSync = useCallback(async () => {
-    if (!isOnline) {
-      alert('Perangkat sedang offline. Sambungkan koneksi internet untuk melakukan sinkronisasi data.');
-      return;
-    }
+  // Sync offline queued transactions when network is restored
+  useEffect(() => {
+    const offlineList = getOfflineSales();
+    setOfflinePendingCount(offlineList.length);
 
-    setIsSyncingPurchases(true);
-    try {
-      // 1. Sync Offline Sales
-      const offlineSalesList = getOfflineSales();
-      if (offlineSalesList.length > 0) {
-        for (const offlineSale of offlineSalesList) {
+    if (isOnline && offlineList.length > 0) {
+      const syncPending = async () => {
+        for (const offlineSale of offlineList) {
           try {
             await setDoc(doc(db, 'sales', offlineSale.id), {
               ...offlineSale,
@@ -1374,63 +1212,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.error('Failed sync for sale', offlineSale.id, e);
           }
         }
-        setOfflinePendingSalesCount(getOfflineSales().length);
-      }
-
-      // 2. Sync Offline Purchases
-      const offlinePurchasesList = await getOfflinePurchasesAsync();
-      if (offlinePurchasesList.length > 0) {
-        const syncResult = await syncOfflinePurchasesToFirestore(
-          db,
-          userProfile,
-          productsMap,
-          ingredientsMap
-        );
-
-        const remainingOffline = await getOfflinePurchasesAsync();
-        setOfflinePendingPurchasesCount(remainingOffline.length);
-
-        if (syncResult.syncedPurchases.length > 0) {
-          setPurchases(prev => {
-            const map = new Map(prev.map(p => [p.id, p]));
-            syncResult.syncedPurchases.forEach(sp => {
-              map.set(sp.id, { ...sp, isOfflineSync: false, syncStatus: 'SYNCHRONIZED' });
-            });
-            return Array.from(map.values());
-          });
-        }
-      }
-    } catch (err) {
-      console.error('Offline synchronization error:', err);
-    } finally {
-      setIsSyncingPurchases(false);
+        setOfflinePendingCount(getOfflineSales().length);
+      };
+      syncPending();
     }
-  }, [isOnline, userProfile, productsMap, ingredientsMap, assembliesMap]);
-
-  // Automatically trigger sync when network connectivity is restored
-  useEffect(() => {
-    let isMounted = true;
-    const checkAndSync = async () => {
-      const offSales = getOfflineSales();
-      const offPurch = await getOfflinePurchasesAsync();
-      if (isMounted) {
-        setOfflinePendingSalesCount(offSales.length);
-        setOfflinePendingPurchasesCount(offPurch.length);
-
-        if (isOnline && (offSales.length > 0 || offPurch.length > 0)) {
-          triggerManualSync();
-        }
-      }
-    };
-    checkAndSync();
-    return () => {
-      isMounted = false;
-    };
-  }, [isOnline, triggerManualSync]);
+  }, [isOnline]);
 
   const syncState = useMemo(() => {
-    return getSyncState(isOnline, offlinePendingSalesCount, offlinePendingPurchasesCount);
-  }, [isOnline, offlinePendingSalesCount, offlinePendingPurchasesCount]);
+    return getSyncState(isOnline, offlinePendingCount);
+  }, [isOnline, offlinePendingCount]);
 
   // Real-time Cash and Wallet Balance Summary (6 Accounts, zero double-counting)
   const cashBalanceSummary = useMemo<CashBalanceSummary>(() => {
@@ -2020,11 +1810,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } catch (err) {
         console.error('Online sale save failed, queueing offline', err);
         saveOfflineSale(saleRecord);
-        setOfflinePendingSalesCount(getOfflineSales().length);
+        setOfflinePendingCount(getOfflineSales().length);
       }
     } else {
       saveOfflineSale(saleRecord);
-      setOfflinePendingSalesCount(getOfflineSales().length);
+      setOfflinePendingCount(getOfflineSales().length);
     }
 
     // Optimistically add to state for immediate receipt display, guarding against duplicates
@@ -2218,44 +2008,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       active: vendorData.active ?? true,
       createdAt: now,
     };
-    if (isOnline) {
-      try {
-        await setDoc(vRef, sanitizeFirestore(newVendor));
-      } catch (err) {
-        console.warn('Online vendor save failed, saving locally', err);
-      }
-    }
-    const updated = deduplicate([newVendor, ...vendors]);
-    setVendors(updated);
-    saveCachedVendors(updated).catch(() => {});
+    await setDoc(vRef, sanitizeFirestore(newVendor));
     return newVendor;
   };
 
   const updateVendor = async (vendorId: string, vendorData: Partial<Vendor>): Promise<void> => {
     const vRef = doc(db, 'vendors', vendorId);
-    if (isOnline) {
-      try {
-        await updateDoc(vRef, sanitizeFirestore({ ...vendorData, updatedAt: new Date().toISOString() }));
-      } catch (err) {
-        console.warn('Online vendor update failed, updating locally', err);
-      }
-    }
-    const updated = vendors.map(v => (v.id === vendorId ? { ...v, ...vendorData, updatedAt: new Date().toISOString() } : v));
-    setVendors(updated);
-    saveCachedVendors(updated).catch(() => {});
+    await updateDoc(vRef, sanitizeFirestore({ ...vendorData, updatedAt: new Date().toISOString() }));
   };
 
   const deleteVendor = async (vendorId: string): Promise<void> => {
-    if (isOnline) {
-      try {
-        await deleteDoc(doc(db, 'vendors', vendorId));
-      } catch (e) {
-        console.warn('Online vendor delete failed', e);
-      }
-    }
-    const updated = vendors.filter(v => v.id !== vendorId);
-    setVendors(updated);
-    saveCachedVendors(updated).catch(() => {});
+    await deleteDoc(doc(db, 'vendors', vendorId));
   };
 
   const createPurchase = async (params: {
@@ -2610,43 +2373,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
-    let isCommittedToFirestore = false;
-    if (isOnline) {
-      try {
-        await batch.commit();
-        isCommittedToFirestore = true;
-      } catch (err) {
-        console.warn('Online Firestore purchase commit failed, falling back to offline queue', err);
-      }
-    }
-
-    if (!isCommittedToFirestore) {
-      newPurchase.isOfflineSync = true;
-      newPurchase.syncStatus = 'PENDING';
-      newPurchase.offlineCreatedAt = now;
-      await saveOfflinePurchase(newPurchase);
-      const remainingQueue = await getOfflinePurchasesAsync();
-      setOfflinePendingPurchasesCount(remainingQueue.length);
-    } else {
-      newPurchase.isOfflineSync = false;
-      newPurchase.syncStatus = 'SYNCHRONIZED';
-      newPurchase.syncedAt = now;
-      saveCachedPurchase(newPurchase).catch(() => {});
-    }
-
-    // Save local caches to IndexedDB immediately so offline state is persistent across reloads
-    if (updatedIngredients.length > 0) {
-      saveCachedIngredients(updatedIngredients).catch(() => {});
-    }
-    if (updatedProducts.length > 0) {
-      saveCachedProducts(updatedProducts).catch(() => {});
-    }
-    if (createdMovements.length > 0) {
-      saveCachedStockMovements(createdMovements).catch(() => {});
-    }
-    if (createdCashMut) {
-      saveCachedCashMutations([createdCashMut]).catch(() => {});
-    }
+    await batch.commit();
 
     // Update optimistic local state immediately
     setPurchases(prev => deduplicate([newPurchase, ...prev]));
@@ -4920,10 +4647,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isSeeding,
         syncState,
         isOnline,
-        offlinePendingSalesCount,
-        offlinePendingPurchasesCount,
-        isSyncingPurchases,
-        triggerManualSync,
         darkMode,
         toggleDarkMode,
         posLayoutMode,
